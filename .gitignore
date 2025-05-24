@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Model and data files
+*.bin
+*.safetensors
+*.gguf
+*.h5
+*.hdf5
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Activation data (large files)
+collected_activations_output/
+*.npz
+*.npy
+
+# Generated outputs
+collected_text_output/
+alignment_artifact_analysis_plot.png
+alignment_artifact_analysis_results.json
+new-output.txt
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment and config
+.env
+.envrc
+*.log
+
+# Cache directories
+.cache/
+__pycache__/
+*.pyc
+
+# MLX specific
+mlx_cache/
+.mlx/
+
+# Hugging Face cache
+.huggingface/
+huggingface_hub/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak

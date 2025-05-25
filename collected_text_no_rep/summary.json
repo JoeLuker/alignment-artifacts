@@ -1,0 +1,11 @@
+{
+  "total_prompts": 100,
+  "total_generated_tokens": 2000,
+  "average_tokens_per_prompt": 20.0,
+  "by_category": {
+    "all_prompts": {
+      "count": 100,
+      "total_tokens": 2000
+    }
+  }
+}

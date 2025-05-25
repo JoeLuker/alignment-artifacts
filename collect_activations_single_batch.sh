@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Single batch collection - processes ALL 50 prompts in one go!
+# Single batch collection - processes ALL 100 prompts in one go!
 # This is the absolute fastest way to collect activations.
 
 PROMPT_FILE_FOR_GEMMA="./prompts_for_gemma_runner_flat.json"
@@ -18,7 +18,7 @@ fi
 
 MODEL_NAME="mlx-community/gemma-3-1b-it-qat-4bit"
 MAX_TOKENS=20       # Number of activation steps (tokens) to collect per prompt
-BATCH_SIZE=50       # ALL prompts in a single batch!
+BATCH_SIZE=100       # ALL prompts in a single batch!
 
 # Ensure output directories exist
 mkdir -p "$RAW_ACTIVATIONS_DIR"
@@ -28,11 +28,11 @@ echo "--- SINGLE BATCH Activation Collection ---"
 echo ""
 echo "⚡ MAXIMUM SPEED MODE ⚡"
 echo ""
-echo "This will process ALL 50 prompts in a single batch!"
+echo "This will process ALL 100 prompts in a single batch!"
 echo "Expected speedup: 50x faster than individual processing"
 echo ""
 echo "Model: $MODEL_NAME"
-echo "Total prompts: 50"
+echo "Total prompts: 100"
 echo "Batch size: $BATCH_SIZE (single batch)"
 echo "Max tokens per prompt: $MAX_TOKENS"
 echo ""
@@ -59,7 +59,7 @@ if [ $EXIT_CODE -eq 0 ]; then
     echo ""
     echo "--- ✅ Single Batch Collection Completed Successfully ---"
     echo ""
-    echo "All 50 prompts processed in ONE batch!"
+    echo "All 100 prompts processed in ONE batch!"
     echo "Activations saved to: $RAW_ACTIVATIONS_DIR"
     echo ""
     echo "Next step: Run the analysis"
@@ -68,6 +68,6 @@ else
     echo ""
     echo "--- ❌ ERROR: Single Batch Collection Failed (Exit Code: $EXIT_CODE) ---"
     echo ""
-    echo "Note: Processing 50 prompts in a single batch requires significant memory."
+    echo "Note: Processing 100 prompts in a single batch requires significant memory."
     echo "If you encounter memory issues, try reducing the batch size in collect_activations_true_batch.sh"
 fi

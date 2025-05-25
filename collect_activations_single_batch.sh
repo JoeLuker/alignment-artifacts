@@ -10,6 +10,12 @@ METADATA_FILE="./prompts_metadata.json"
 RAW_ACTIVATIONS_DIR="./collected_activations_single_batch"
 TEXT_RESULTS_DIR="./collected_text_single_batch"
 
+# Create flat prompts file if it doesn't exist
+if [ ! -f "$PROMPT_FILE_FOR_GEMMA" ]; then
+    echo "Creating flat prompts file..."
+    .venv/bin/python create_flat_batched_prompts.py
+fi
+
 MODEL_NAME="mlx-community/gemma-3-1b-it-qat-4bit"
 MAX_TOKENS=20       # Number of activation steps (tokens) to collect per prompt
 BATCH_SIZE=50       # ALL prompts in a single batch!

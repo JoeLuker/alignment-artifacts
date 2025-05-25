@@ -129,7 +129,7 @@ def main():
     print(f"Total prompts: {len(prompt_mappings)}")
     
     # Check for batch directory
-    batch_dir = RAW_ACTIVATIONS_DIR / "all_prompts" / "batch" / "batch_1"
+    batch_dir = RAW_ACTIVATIONS_DIR / "batch_1"
     if not batch_dir.exists():
         print(f"\n❌ ERROR: Batch directory not found: {batch_dir}")
         return

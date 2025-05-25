@@ -4,118 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a research project for analyzing "alignment artifacts" in language models, specifically using the Gemma-3-1b model. The project collects model activations during text generation to detect geometric signatures that emerge when models respond to safety-sensitive prompts versus neutral prompts.
+This repository analyzes "alignment artifacts" in language models - geometric signatures that emerge when models respond to safety-sensitive prompts. The project specifically tests whether different categories of safety training (e.g., political neutrality vs harmlessness) create different strengths of alignment artifacts.
 
 ## Key Architecture Components
 
 ### Core Workflow
-1. **Prompt Pairs**: The project uses matched pairs of prompts (natural vs artifact-inducing) defined in `alignment_artifact_prompt_pairs.json`
-2. **Activation Collection**: Model activations are captured during generation using the `gemma_refactored` module
-3. **Analysis**: Collected activations are analyzed to detect alignment artifacts using statistical measures (Cohen's d, classification accuracy)
+1. **Prompt Pairs**: Matched pairs of prompts (natural vs artifact-inducing) defined in `alignment_artifact_prompt_pairs.json`
+2. **Batch Collection**: All 50 prompts processed simultaneously for maximum speed
+3. **Category Analysis**: Computes Cohen's d separately for each safety category
 
 ### Main Components
 
-- **`gemma_refactored/`**: Refactored Gemma model implementation with activation capture hooks
+- **`gemma_refactored/`**: Refactored Gemma model implementation with activation capture
   - `model_architecture.py`: Core Gemma model with activation monitoring
   - `activation_capture.py`: System for capturing and storing model activations
   - `generation.py`: Text generation with sampling strategies
-  - `prompt_processing.py`: Batch processing and prompt management
   - `main.py`: CLI interface and orchestration
 
-- **`collect_activations.sh`**: Shell script that orchestrates activation collection across all prompt pairs
-- **`analyze_collected_activations.py`**: Analyzes collected activations to detect alignment artifacts
+- **`collect_activations_single_batch.sh`**: Collects activations for all prompts in one batch
+- **`analyze_by_category.py`**: Analyzes alignment artifacts by category to test hypotheses
 - **`run_model.py`**: Entry point that wraps the gemma_refactored module
-
-### Data Flow
-1. Prompts are loaded from `alignment_artifact_prompt_pairs.json`
-2. Each prompt pair is processed through the model with activation capture enabled
-3. Activations are saved to `collected_activations_output/` in NPZ format
-4. Analysis script processes all activations to compute artifact strength metrics
-5. Results are saved as JSON and visualization plots
 
 ## Common Commands
 
-### Running the Complete Pipeline
-
-#### Option 1: Original (Slow) Method
 ```bash
-# 1. Collect activations for all prompt pairs (one at a time)
-./collect_activations.sh
-
-# 2. Analyze collected activations
-python analyze_collected_activations.py
-```
-
-#### Option 2: True Batch Processing (10x Faster!)
-```bash
-# 1. Create flat prompt structure for batching
-.venv/bin/python create_flat_batched_prompts.py
-
-# 2. Collect activations in batches of 10
-./collect_activations_true_batch.sh
-
-# 3. Analyze batched activations
-.venv/bin/python analyze_true_batch_activations.py
-```
-
-#### Option 3: Single Batch Processing (50x Faster! ⚡)
-```bash
-# 1. Create flat prompt structure (if not already done)
-.venv/bin/python create_flat_batched_prompts.py
-
-# 2. Collect ALL activations in a single batch
+# 1. Collect activations (50x faster than individual processing)
 ./collect_activations_single_batch.sh
 
-# 3. Analyze single batch results
-.venv/bin/python analyze_single_batch_activations.py
-
-# 4. (Optional) Analyze by category to test hypothesis
+# 2. Analyze by category to test hypotheses
 .venv/bin/python analyze_by_category.py
 ```
 
-**Note**: Single batch processing requires more memory but provides maximum speed.
-
-The category-specific analysis tests whether different types of safety training 
-(e.g., political neutrality vs harmlessness) create different strengths of 
-alignment artifacts.
-
-### Individual Components
-
-```bash
-# Run model with custom parameters
-python run_model.py \
-  --model mlx-community/gemma-3-1b-it-qat-4bit \
-  --max-tokens 20 \
-  --save-activations \
-  --prompts-file prompts_for_gemma_runner.json \
-  --process-by-group
-
-# Create sample prompts file
-python run_model.py --create-sample-prompts sample_prompts.json
-```
-
-### Key Parameters for Activation Collection
-- `--max-tokens 20`: Number of generation steps (tokens) to collect activations for
-- `--save-activations`: Enable activation capture
-- `--process-by-group`: Process each prompt group separately (required for proper organization)
-- `--batch-size 1`: Should be 1 when using --process-by-group for this analysis
-
-## Model and Dependencies
-
-The project uses:
-- **Model**: `mlx-community/gemma-3-1b-it-qat-4bit` (4-bit quantized Gemma)
-- **Framework**: MLX (Apple's machine learning framework)
-- **Key dependencies**: mlx, numpy, matplotlib, transformers, huggingface_hub
-
-## Analysis Configuration
-
-Key parameters in `analyze_collected_activations.py`:
-- `NUM_LAYERS = 26`: Gemma-3-1b has 26 transformer layers
-- `KEY_PATTERN_TEMPLATE = "model.layers.{layer}.mlp.output"`: Analyzes MLP output activations
-- `NUM_TOKEN_STEPS_TO_COLLECT = 20`: Should match --max-tokens used during collection
-- `EXPECTED_HIDDEN_DIM = 1152`: Model's MLP output dimension
-
-### Prompt Categories
+## Prompt Categories
 
 The analysis includes 5 categories of safety-relevant prompts:
 - **technical_dangerous**: Technical knowledge that becomes dangerous in certain contexts
@@ -124,14 +44,22 @@ The analysis includes 5 categories of safety-relevant prompts:
 - **medical_ethics**: Medical information vs unethical medical advice
 - **information_deception**: Information literacy vs deception techniques
 
-The category-specific analysis (`analyze_by_category.py`) computes Cohen's d separately 
-for each category to test whether different types of safety training create different 
-strengths of alignment artifacts.
+## Key Parameters
 
-## Output Structure
+- **Model**: `mlx-community/gemma-3-1b-it-qat-4bit`
+- **Batch Size**: 50 (all prompts at once)
+- **Layers**: 26 transformer layers
+- **Activation Key**: `model.layers.{layer}.mlp.output`
+- **Generation Steps**: 20 tokens per prompt
 
-- `collected_activations_output/`: Raw activation data organized by prompt condition
-  - `{natural|artifact}_{category}_{id}/prompt_list/batch_1/activations_step_*.npz`
-- `collected_text_output/`: Generated text and metadata
-- `alignment_artifact_analysis_results.json`: Analysis results with Cohen's d scores
-- `alignment_artifact_analysis_plot.png`: Visualization of artifact strength by layer
+## Scientific Hypothesis
+
+The main hypothesis tested: **Political neutrality training creates stronger alignment artifacts than harmlessness training.**
+
+The category analysis computes Cohen's d effect sizes separately for each category, revealing which types of safety training most strongly affect model geometry.
+
+## Output Files
+
+- `alignment_artifacts_by_category.png`: Visualizations showing effect sizes by category
+- `alignment_artifacts_by_category_results.json`: Detailed metrics and hypothesis test results
+- `collected_activations_single_batch/`: Raw activation data (in .gitignore)

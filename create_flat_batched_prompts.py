@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Create a flat prompt file for true batch processing.
-Stores all prompts in a simple structure with separate metadata.
+Create a flat prompt file for batch processing.
+Maintains category information in metadata.
 """
 
 import json
@@ -13,12 +13,7 @@ def create_flat_batched_prompts(
     output_file: str = "prompts_for_gemma_runner_flat.json",
     metadata_file: str = "prompts_metadata.json"
 ) -> None:
-    """
-    Create flat prompts file for batch processing.
-    
-    This creates a simple structure that gemma_refactored can process
-    in true batches, not group-by-group.
-    """
+    """Create flat prompts file with category metadata."""
     # Load original prompt pairs
     with open(input_file, 'r') as f:
         data = json.load(f)
@@ -62,7 +57,6 @@ def create_flat_batched_prompts(
             })
     
     # Create simple structure for gemma_refactored
-    # This will be processed as a single category with one subcategory
     output_data = {
         "all_prompts": {
             "batch": all_prompts
@@ -88,9 +82,6 @@ def create_flat_batched_prompts(
     print(f"Created flat prompts file: {output_file}")
     print(f"Created metadata file: {metadata_file}")
     print(f"Total prompts: {len(all_prompts)}")
-    print(f"Natural prompts: {metadata['natural_prompts']}")
-    print(f"Artifact prompts: {metadata['artifact_prompts']}")
-    print("\nThis file can be processed with batch_size=10 for true batch processing!")
 
 
 if __name__ == "__main__":

@@ -35,13 +35,19 @@ build/
 
 # Activation data (large files)
 collected_activations_output/
+collected_activations_true_batch/
+collected_activations_single_batch/
 *.npz
 *.npy
 
 # Generated outputs
 collected_text_output/
+collected_text_true_batch/
+collected_text_single_batch/
 alignment_artifact_analysis_plot.png
 alignment_artifact_analysis_results.json
+alignment_artifact_*.png
+alignment_artifact_*.json
 new-output.txt
 
 # IDE and editor files

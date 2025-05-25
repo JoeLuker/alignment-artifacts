@@ -84,3 +84,13 @@ temp/
 
 # claude
 .claude/
+
+collected_activations_single_batch/
+collected_activations_true_batch/
+collected_activations_output/
+collected_text_single_batch/
+collected_text_true_batch/
+collected_text_output/
+
+alignment_artifact_*.png
+alignment_artifact_*.json

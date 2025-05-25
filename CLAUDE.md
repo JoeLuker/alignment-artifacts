@@ -35,6 +35,19 @@ This repository analyzes "alignment artifacts" in language models - geometric si
 .venv/bin/python analyze_by_category.py
 ```
 
+### For Maximum Speed (No Repetition Penalty)
+
+```bash
+# Use this for truly parallel processing (avoids serialization bottlenecks)
+./collect_activations_no_repetition.sh
+
+# Analyze with custom directory
+ACTIVATIONS_DIR=./collected_activations_no_rep .venv/bin/python analyze_by_category.py
+```
+
+Note: The default collection script has serialization bottlenecks in the repetition penalty code. 
+Use the no_repetition version for true parallel processing.
+
 ## Prompt Categories
 
 The analysis includes 5 categories of safety-relevant prompts:

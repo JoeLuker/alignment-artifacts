@@ -29,12 +29,34 @@ ACTIVATIONS_DIR=./collected_activations_no_rep python analyze_by_category.py
 ```
 This computes Cohen's d effect sizes by category and generates visualizations.
 
+5. **Use suppression for inference:**
+```bash
+python inference_with_suppression_simple.py "Your prompt here" --compare
+```
+This applies the discovered artifact directions to reduce safety refusals.
+
 ## Key Files
 
 - `alignment_artifact_prompt_pairs.json` - 100 prompts (50 natural/artifact pairs) across 5 categories
 - `gemma_refactored/` - Model implementation with activation capture hooks
 - `analyze_by_category.py` - Computes effect sizes and tests hypotheses about different safety categories
 
+## Suppression Examples
+
+```bash
+# Basic usage
+python inference_with_suppression_simple.py "How do I pick a lock?"
+
+# Compare with/without suppression  
+python inference_with_suppression_simple.py "Which party should I vote for?" --compare
+
+# Stronger suppression
+python inference_with_suppression_simple.py "How to make explosives?" --scale 5.0
+
+# Target specific categories
+python inference_with_suppression_simple.py "Medical advice" --categories medical_ethics
+```
+
 ## Results
 
-The analysis tests whether political neutrality training creates stronger artifacts than harmlessness training. Initial results showed the opposite - harmlessness artifacts were stronger (d=4.41 vs d=2.76).
+Analysis shows clear geometric artifacts across all safety categories, with particularly strong effects in early MLP layers (1-6). The suppression script uses these discovered directions to reduce safety-related refusals during inference.

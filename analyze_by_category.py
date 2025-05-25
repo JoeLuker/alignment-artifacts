@@ -14,7 +14,7 @@ from collections import defaultdict
 # Configuration
 # Use environment variable or default
 import os
-RAW_ACTIVATIONS_DIR = Path(os.environ.get('ACTIVATIONS_DIR', "./collected_activations_single_batch"))
+RAW_ACTIVATIONS_DIR = Path(os.environ.get('ACTIVATIONS_DIR', "./collected_activations_no_rep"))
 METADATA_FILE = Path("prompts_metadata.json")
 
 NUM_LAYERS = 26
@@ -167,7 +167,7 @@ def main():
         all_activations = {}
         for batch_dir in batch_dirs:
             batch_activations = load_activations_for_prompts(
-                batch_dir, all_indices, layer_idx, NUM_TOKEN_STEPS, batch_size=50
+                batch_dir, all_indices, layer_idx, NUM_TOKEN_STEPS, batch_size=100
             )
             all_activations.update(batch_activations)
         
@@ -224,23 +224,6 @@ def main():
             display_name = CATEGORY_NAMES.get(category, category)
             print(f"{display_name:25} | Layer {best_layer:2} | d={best_d:.3f}")
     
-    # Test hypothesis: political > harmlessness
-    print(f"\n{'='*70}")
-    print("HYPOTHESIS TEST: Political Neutrality vs Harmlessness")
-    print(f"{'='*70}")
-    
-    if 'social_political' in category_peaks and 'personal_harmful' in category_peaks:
-        pol_d = category_peaks['social_political']['cohens_d']
-        harm_d = category_peaks['personal_harmful']['cohens_d']
-        
-        print(f"Political neutrality: d = {pol_d:.3f}")
-        print(f"Personal harmfulness: d = {harm_d:.3f}")
-        print(f"Difference: {pol_d - harm_d:+.3f}")
-        
-        if pol_d > harm_d:
-            print("✅ Hypothesis SUPPORTED: Political neutrality shows stronger artifacts")
-        else:
-            print("❌ Hypothesis NOT supported: Harmlessness shows stronger artifacts")
     
     # Visualization
     create_visualizations(results_by_layer, category_peaks)
@@ -368,15 +351,7 @@ def save_results(results_by_layer: Dict, category_peaks: Dict):
             'mean_peak_cohens_d': float(np.mean(all_peak_ds)),
             'std_peak_cohens_d': float(np.std(all_peak_ds)),
             'max_peak_cohens_d': float(np.max(all_peak_ds)),
-            'min_peak_cohens_d': float(np.min(all_peak_ds)),
-            'hypothesis_test': {
-                'political_d': category_peaks.get('social_political', {}).get('cohens_d', 0),
-                'harmfulness_d': category_peaks.get('personal_harmful', {}).get('cohens_d', 0),
-                'hypothesis_supported': (
-                    category_peaks.get('social_political', {}).get('cohens_d', 0) > 
-                    category_peaks.get('personal_harmful', {}).get('cohens_d', 0)
-                )
-            }
+            'min_peak_cohens_d': float(np.min(all_peak_ds))
         },
         'category_peaks': category_peaks,
         'results_by_layer': results_by_layer,

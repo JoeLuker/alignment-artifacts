@@ -39,11 +39,16 @@ def load_activations_for_prompts(
     batch_dir: Path,
     prompt_indices: List[int],
     layer_idx: int,
-    num_steps: int
+    num_steps: int,
+    batch_size: int = 50
 ) -> Dict[int, List[np.ndarray]]:
     """Load activations for specific prompt indices."""
     activations_by_prompt = defaultdict(list)
     key = KEY_PATTERN_TEMPLATE.format(layer=layer_idx)
+    
+    # Determine batch number and offset
+    batch_num = int(batch_dir.name.split('_')[1]) - 1  # batch_1 -> 0, batch_2 -> 1
+    batch_offset = batch_num * batch_size
     
     for step in range(num_steps):
         step_file = batch_dir / f"activations_step_{step}.npz"
@@ -54,16 +59,20 @@ def load_activations_for_prompts(
                 if key in data:
                     batch_data = data[key]
                     
-                    for idx in prompt_indices:
-                        if batch_data.ndim == 3 and idx < batch_data.shape[0]:
-                            vector = batch_data[idx, 0, :]
-                        elif batch_data.ndim == 2 and idx < batch_data.shape[0]:
-                            vector = batch_data[idx, :]
-                        else:
-                            continue
-                        
-                        if vector.shape == (EXPECTED_HIDDEN_DIM,):
-                            activations_by_prompt[idx].append(vector)
+                    for global_idx in prompt_indices:
+                        # Convert global index to batch-local index
+                        if batch_offset <= global_idx < batch_offset + batch_size:
+                            local_idx = global_idx - batch_offset
+                            
+                            if batch_data.ndim == 3 and local_idx < batch_data.shape[0]:
+                                vector = batch_data[local_idx, 0, :]
+                            elif batch_data.ndim == 2 and local_idx < batch_data.shape[0]:
+                                vector = batch_data[local_idx, :]
+                            else:
+                                continue
+                            
+                            if vector.shape == (EXPECTED_HIDDEN_DIM,):
+                                activations_by_prompt[global_idx].append(vector)
             except Exception as e:
                 print(f"Error loading {step_file}: {e}")
     
@@ -130,11 +139,13 @@ def main():
     print(f"Categories found: {list(categories.keys())}")
     print(f"Total prompts: {len(prompt_mappings)}")
     
-    # Check for batch directory
-    batch_dir = RAW_ACTIVATIONS_DIR / "batch_1"
-    if not batch_dir.exists():
-        print(f"\n❌ ERROR: Batch directory not found: {batch_dir}")
+    # Find all batch directories
+    batch_dirs = sorted([d for d in RAW_ACTIVATIONS_DIR.iterdir() if d.is_dir() and d.name.startswith("batch_")])
+    if not batch_dirs:
+        print(f"\n❌ ERROR: No batch directories found in {RAW_ACTIVATIONS_DIR}")
         return
+    
+    print(f"Found {len(batch_dirs)} batch directories")
     
     # Analyze each layer
     results_by_layer = {}
@@ -152,10 +163,13 @@ def main():
             all_indices.extend(cat_data['natural'])
             all_indices.extend(cat_data['artifact'])
         
-        # Load activations for all prompts at once
-        all_activations = load_activations_for_prompts(
-            batch_dir, all_indices, layer_idx, NUM_TOKEN_STEPS
-        )
+        # Load activations from all batches
+        all_activations = {}
+        for batch_dir in batch_dirs:
+            batch_activations = load_activations_for_prompts(
+                batch_dir, all_indices, layer_idx, NUM_TOKEN_STEPS, batch_size=50
+            )
+            all_activations.update(batch_activations)
         
         # Analyze each category
         for category, indices_by_type in categories.items():

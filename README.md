@@ -1,53 +1,40 @@
-# Alignment Artifacts Category Analysis
+# Alignment Artifacts Analysis
 
-This project analyzes "alignment artifacts" in language models - geometric signatures that emerge when models respond to safety-sensitive prompts. It specifically tests whether different categories of safety training create different strengths of alignment artifacts.
-
-## Scientific Hypothesis
-
-**Political neutrality training creates stronger alignment artifacts than harmlessness training.**
+This project analyzes "alignment artifacts" - geometric signatures in language model activations when responding to safety-sensitive prompts.
 
 ## Quick Start
 
+1. **Setup environment:**
 ```bash
-# 1. Set up Python environment
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install mlx numpy matplotlib
-
-# 2. Collect activations (processes all 50 prompts in one batch)
-./collect_activations_single_batch.sh
-
-# 3. Analyze by category
-python analyze_by_category.py
+source .venv/bin/activate  # On macOS/Linux
+pip install -r requirements.txt
 ```
 
-## Prompt Categories
+2. **Prepare prompts:**
+```bash
+python create_flat_batched_prompts.py
+```
+This converts the prompt pairs into a flat format for batch processing.
 
-The analysis includes 5 categories:
-- **technical_dangerous**: Technical knowledge vs dangerous applications
-- **social_political**: Neutral analysis vs politically charged positions  
-- **personal_harmful**: Personal wellness vs self-harm
-- **medical_ethics**: Medical information vs unethical medical advice
-- **information_deception**: Information literacy vs deception techniques
+3. **Collect activations:**
+```bash
+./collect_activations_no_repetition.sh
+```
+This runs the model on all prompts and saves activations. Takes ~2-3 minutes.
+
+4. **Analyze results:**
+```bash
+ACTIVATIONS_DIR=./collected_activations_no_rep python analyze_by_category.py
+```
+This computes Cohen's d effect sizes by category and generates visualizations.
+
+## Key Files
+
+- `alignment_artifact_prompt_pairs.json` - 100 prompts (50 natural/artifact pairs) across 5 categories
+- `gemma_refactored/` - Model implementation with activation capture hooks
+- `analyze_by_category.py` - Computes effect sizes and tests hypotheses about different safety categories
 
 ## Results
 
-The analysis produces:
-- `alignment_artifacts_by_category.png`: Visualizations showing Cohen's d by category
-- `alignment_artifacts_by_category_results.json`: Detailed metrics and hypothesis test
-
-Key metrics:
-- **Cohen's d > 0.8**: Large effect (strong alignment artifact)
-- **Cohen's d > 0.5**: Medium effect
-- **Cohen's d > 0.2**: Small effect
-
-## Repository Structure
-
-```
-alignment-artifacts/
-├── gemma_refactored/          # Model implementation with activation capture
-├── alignment_artifact_prompt_pairs.json    # Original prompt pairs
-├── collect_activations_single_batch.sh     # Batch collection script
-├── analyze_by_category.py                  # Category-specific analysis
-└── CATEGORY_ANALYSIS.md                    # Detailed documentation
-```
+The analysis tests whether political neutrality training creates stronger artifacts than harmlessness training. Initial results showed the opposite - harmlessness artifacts were stronger (d=4.41 vs d=2.76).

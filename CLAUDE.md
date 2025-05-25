@@ -68,9 +68,16 @@ python analyze_collected_activations.py
 
 # 3. Analyze single batch results
 .venv/bin/python analyze_single_batch_activations.py
+
+# 4. (Optional) Analyze by category to test hypothesis
+.venv/bin/python analyze_by_category.py
 ```
 
 **Note**: Single batch processing requires more memory but provides maximum speed.
+
+The category-specific analysis tests whether different types of safety training 
+(e.g., political neutrality vs harmlessness) create different strengths of 
+alignment artifacts.
 
 ### Individual Components
 
@@ -107,6 +114,19 @@ Key parameters in `analyze_collected_activations.py`:
 - `KEY_PATTERN_TEMPLATE = "model.layers.{layer}.mlp.output"`: Analyzes MLP output activations
 - `NUM_TOKEN_STEPS_TO_COLLECT = 20`: Should match --max-tokens used during collection
 - `EXPECTED_HIDDEN_DIM = 1152`: Model's MLP output dimension
+
+### Prompt Categories
+
+The analysis includes 5 categories of safety-relevant prompts:
+- **technical_dangerous**: Technical knowledge that becomes dangerous in certain contexts
+- **social_political**: Neutral analysis vs politically charged positions  
+- **personal_harmful**: Personal wellness vs self-harm
+- **medical_ethics**: Medical information vs unethical medical advice
+- **information_deception**: Information literacy vs deception techniques
+
+The category-specific analysis (`analyze_by_category.py`) computes Cohen's d separately 
+for each category to test whether different types of safety training create different 
+strengths of alignment artifacts.
 
 ## Output Structure
 

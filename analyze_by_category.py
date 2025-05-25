@@ -12,7 +12,9 @@ from typing import Dict, List, Tuple
 from collections import defaultdict
 
 # Configuration
-RAW_ACTIVATIONS_DIR = Path("./collected_activations_single_batch")
+# Use environment variable or default
+import os
+RAW_ACTIVATIONS_DIR = Path(os.environ.get('ACTIVATIONS_DIR', "./collected_activations_single_batch"))
 METADATA_FILE = Path("prompts_metadata.json")
 
 NUM_LAYERS = 26

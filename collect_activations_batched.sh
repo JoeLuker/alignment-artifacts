@@ -25,11 +25,12 @@ echo "Max tokens (steps) per prompt: $MAX_TOKENS"
 echo "Batch size: $BATCH_SIZE"
 
 # Run the model with batched prompts
+# NOTE: We don't use --process-by-group because that would process each
+# batch's "prompts" subcategory separately, defeating the batching purpose
 .venv/bin/python ./run_model.py \
     --model "$MODEL_NAME" \
     --max-tokens "$MAX_TOKENS" \
     --prompts-file "$PROMPT_FILE_FOR_GEMMA" \
-    --process-by-group \
     --save-activations \
     --activations-dir "$RAW_ACTIVATIONS_DIR" \
     --output-dir "$TEXT_RESULTS_DIR" \

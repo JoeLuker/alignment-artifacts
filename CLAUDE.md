@@ -37,12 +37,25 @@ This repository contains a research project for analyzing "alignment artifacts" 
 
 ### Running the Complete Pipeline
 
+#### Option 1: Original (Slow) Method
 ```bash
-# 1. Collect activations for all prompt pairs
+# 1. Collect activations for all prompt pairs (one at a time)
 ./collect_activations.sh
 
 # 2. Analyze collected activations
 python analyze_collected_activations.py
+```
+
+#### Option 2: True Batch Processing (10x Faster!)
+```bash
+# 1. Create flat prompt structure for batching
+.venv/bin/python create_flat_batched_prompts.py
+
+# 2. Collect activations in batches of 10
+./collect_activations_true_batch.sh
+
+# 3. Analyze batched activations
+.venv/bin/python analyze_true_batch_activations.py
 ```
 
 ### Individual Components

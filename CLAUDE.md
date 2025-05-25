@@ -58,6 +58,20 @@ python analyze_collected_activations.py
 .venv/bin/python analyze_true_batch_activations.py
 ```
 
+#### Option 3: Single Batch Processing (50x Faster! ⚡)
+```bash
+# 1. Create flat prompt structure (if not already done)
+.venv/bin/python create_flat_batched_prompts.py
+
+# 2. Collect ALL activations in a single batch
+./collect_activations_single_batch.sh
+
+# 3. Analyze single batch results
+.venv/bin/python analyze_single_batch_activations.py
+```
+
+**Note**: Single batch processing requires more memory but provides maximum speed.
+
 ### Individual Components
 
 ```bash

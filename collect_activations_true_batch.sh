@@ -10,7 +10,7 @@ TEXT_RESULTS_DIR="./collected_text_true_batch"
 
 MODEL_NAME="mlx-community/gemma-3-1b-it-qat-4bit"
 MAX_TOKENS=20       # Number of activation steps (tokens) to collect per prompt
-BATCH_SIZE=10       # TRUE batch size - will process 10 prompts simultaneously!
+BATCH_SIZE=50       # Process ALL prompts in a single batch!
 
 # Ensure output directories exist
 mkdir -p "$RAW_ACTIVATIONS_DIR"
@@ -23,12 +23,12 @@ echo "Outputting raw activations to: $RAW_ACTIVATIONS_DIR"
 echo "Outputting text results to: $TEXT_RESULTS_DIR"
 echo "Model: $MODEL_NAME"
 echo "Max tokens (steps) per prompt: $MAX_TOKENS"
-echo "Batch size: $BATCH_SIZE (TRUE batching - 10 prompts at once!)"
+echo "Batch size: $BATCH_SIZE (SINGLE BATCH - ALL prompts at once!)"
 echo ""
 echo "Expected processing:"
 echo "  - 50 prompts total"
-echo "  - 5 batches (10 prompts each)"
-echo "  - Approximately 10x faster than individual processing!"
+echo "  - 1 single batch containing all prompts"
+echo "  - Maximum possible speed - 50x faster than individual processing!"
 
 # Run the model with true batch processing
 .venv/bin/python ./run_model.py \

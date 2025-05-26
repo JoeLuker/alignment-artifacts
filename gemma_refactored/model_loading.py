@@ -98,9 +98,29 @@ class BaseModelArgs:
 def _get_classes(config: Dict[str, Any]) -> Tuple[Type, Type]:
     """
     Get the model and model args classes based on the model type.
-    For Gemma3 models, this will return Gemma3Model and ModelArgs.
     """
-    # Import here to avoid circular imports
+    # Check if it's a multimodal model
+    is_multimodal = (
+        "vision_config" in config or 
+        "text_config" in config or
+        "gemma3forconditionalgenerationconfig" in str(config.get("architectures", [])).lower()
+    )
+    
+    if is_multimodal:
+        # Use the new Gemma models that can handle multimodal
+        from .gemma_models import Model, ModelArgs
+        
+        # For multimodal models, we need to extract the text config
+        if "text_config" in config:
+            # Merge text config into main config for compatibility
+            text_config = config["text_config"]
+            for k, v in text_config.items():
+                if k not in config:
+                    config[k] = v
+        
+        return Model, ModelArgs
+    
+    # Default to original implementation for backward compatibility
     from .model_architecture import Model, ModelArgs
     return Model, ModelArgs
 
@@ -173,6 +193,14 @@ def load_model_weights(model, model_path: Path, config: dict):
     # Sanitize weights using model's sanitize method
     if hasattr(model, 'sanitize'):
         weights = model.sanitize(weights)
+    
+    # Additional sanitization for multimodal models
+    if "vision_config" in config:
+        # Remove vision tower weights that we don't support yet
+        vision_keys = [k for k in weights.keys() if "vision" in k]
+        for k in vision_keys:
+            del weights[k]
+        print(f"Note: Removed {len(vision_keys)} vision-related weights (multimodal not fully supported)")
     
     # Filter weights to match model parameters (after potential quantization)
     final_params = dict(tree_flatten(model.parameters()))

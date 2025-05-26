@@ -94,3 +94,6 @@ collected_text_output/
 
 alignment_artifact_*.png
 alignment_artifact_*.json
+
+collected_activations_no_rep/
+collected_text_no_rep/

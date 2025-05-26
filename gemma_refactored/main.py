@@ -163,6 +163,25 @@ def main():
     # Determine activation compression
     save_compress_flag = not args.no_compress_activations
 
+    # Save model config if we're saving activations
+    if activations_output_dir:
+        try:
+            # Get model config
+            model_config = {
+                'model_name': args.model,
+                'num_hidden_layers': model.model.num_hidden_layers,
+                'hidden_size': model.model.args.hidden_size,
+                'intermediate_size': model.model.args.intermediate_size,
+                'num_attention_heads': model.model.args.num_attention_heads,
+                'vocab_size': model.model.args.vocab_size,
+            }
+            config_path = activations_output_dir / "model_config.json"
+            with open(config_path, 'w') as f:
+                json.dump(model_config, f, indent=2)
+            print(f"Saved model config to {config_path}")
+        except Exception as e:
+            print(f"Warning: Could not save model config: {e}")
+
     # Process Prompts
     results = []
     prompt_info_for_saving = None  # Keep track of metadata for saving

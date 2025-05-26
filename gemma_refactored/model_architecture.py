@@ -160,7 +160,11 @@ class Attention(nn.Module):
         self.layer_idx = layer_idx
 
         # Use query_pre_attn_scalar if present, default based on head_dim
-        self.scale = getattr(args, 'query_pre_attn_scalar', head_dim) ** -0.5
+        query_scalar = getattr(args, 'query_pre_attn_scalar', None)
+        if query_scalar is not None:
+            self.scale = query_scalar ** -0.5
+        else:
+            self.scale = head_dim ** -0.5
 
         self.q_proj = nn.Linear(dim, n_heads * head_dim, bias=False)
         self.k_proj = nn.Linear(dim, n_kv_heads * head_dim, bias=False)

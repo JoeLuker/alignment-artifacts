@@ -21,32 +21,27 @@ This repository analyzes "alignment artifacts" in language models - geometric si
   - `generation.py`: Text generation with sampling strategies
   - `main.py`: CLI interface and orchestration
 
-- **`collect_activations_single_batch.sh`**: Collects activations for all prompts in one batch
+- **`collect_activations_no_repetition.sh`**: Collects activations for all prompts (true parallel processing)
 - **`analyze_by_category.py`**: Analyzes alignment artifacts by category to test hypotheses
+- **`analyze_layer_patterns.py`**: Identifies which layers show strongest alignment artifacts
+- **`inference_with_suppression_clean.py`**: Applies suppression vectors during inference
 - **`run_model.py`**: Entry point that wraps the gemma_refactored module
 
 ## Common Commands
 
 ```bash
-# 1. Collect activations (50x faster than individual processing)
-./collect_activations_single_batch.sh
-
-# 2. Analyze by category to test hypotheses
-.venv/bin/python analyze_by_category.py
-```
-
-### For Maximum Speed (No Repetition Penalty)
-
-```bash
-# Use this for truly parallel processing (avoids serialization bottlenecks)
+# 1. Collect activations (true parallel processing)
 ./collect_activations_no_repetition.sh
 
-# Analyze with custom directory
+# 2. Analyze by category to test hypotheses
 ACTIVATIONS_DIR=./collected_activations_no_rep .venv/bin/python analyze_by_category.py
-```
 
-Note: The default collection script has serialization bottlenecks in the repetition penalty code. 
-Use the no_repetition version for true parallel processing.
+# 3. (Optional) Analyze which layers show strongest effects
+.venv/bin/python analyze_layer_patterns.py
+
+# 4. Apply suppression during inference
+.venv/bin/python inference_with_suppression_clean.py "Your prompt here" --compare
+```
 
 ## Prompt Categories
 
@@ -75,4 +70,6 @@ The category analysis computes Cohen's d effect sizes separately for each catego
 
 - `alignment_artifacts_by_category.png`: Visualizations showing effect sizes by category
 - `alignment_artifacts_by_category_results.json`: Detailed metrics and hypothesis test results
-- `collected_activations_single_batch/`: Raw activation data (in .gitignore)
+- `layer_analysis_alignment_artifacts.png`: Layer-by-layer artifact strength visualization
+- `layer_analysis_results.json`: Detailed layer analysis results
+- `collected_activations_no_rep/`: Raw activation data (in .gitignore)

@@ -17,13 +17,14 @@ import os
 RAW_ACTIVATIONS_DIR = Path(os.environ.get('ACTIVATIONS_DIR', "./collected_activations_no_rep"))
 METADATA_FILE = Path("prompts_metadata.json")
 
-NUM_LAYERS = 26
+# Model configuration - will be loaded dynamically
+NUM_LAYERS = None
 KEY_PATTERN_TEMPLATE = "model.layers.{layer}.mlp.output"
 NUM_TOKEN_STEPS = 20
-EXPECTED_HIDDEN_DIM = 1152
+EXPECTED_HIDDEN_DIM = None
 
-OUTPUT_FIGURE = Path("alignment_artifacts_by_category.png")
-OUTPUT_RESULTS = Path("alignment_artifacts_by_category_results.json")
+OUTPUT_FIGURE = Path("results/figures/alignment_artifacts_by_category.png")
+OUTPUT_RESULTS = Path("results/data/alignment_artifacts_by_category_results.json")
 
 # Category display names
 CATEGORY_NAMES = {
@@ -119,10 +120,45 @@ def compute_category_metrics(
     }
 
 
+def load_model_config(activations_dir: Path) -> Tuple[int, int]:
+    """Load model configuration from saved config file."""
+    config_file = activations_dir / "model_config.json"
+    if config_file.exists():
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        return config.get('num_hidden_layers', 26), config.get('hidden_size', 1152)
+    else:
+        # Try to infer from activation files
+        batch_dirs = sorted([d for d in activations_dir.iterdir() if d.is_dir() and d.name.startswith("batch_")])
+        if batch_dirs:
+            # Check first activation file
+            for step_file in sorted(batch_dirs[0].glob("activations_step_*.npz")):
+                data = np.load(step_file)
+                # Find highest layer number
+                max_layer = -1
+                hidden_dim = None
+                for key in data.keys():
+                    if 'model.layers.' in key and '.mlp.output' in key:
+                        layer_num = int(key.split('.')[2])
+                        max_layer = max(max_layer, layer_num)
+                        if hidden_dim is None:
+                            hidden_dim = data[key].shape[-1]
+                if max_layer >= 0:
+                    return max_layer + 1, hidden_dim
+        # Default fallback
+        print("Warning: Could not determine model config, using defaults")
+        return 26, 1152
+
+
 def main():
     """Analyze alignment artifacts by category."""
     print("\n🔬 CATEGORY-SPECIFIC ALIGNMENT ARTIFACT ANALYSIS 🔬")
     print("="*70)
+    
+    # Load model configuration
+    global NUM_LAYERS, EXPECTED_HIDDEN_DIM
+    NUM_LAYERS, EXPECTED_HIDDEN_DIM = load_model_config(RAW_ACTIVATIONS_DIR)
+    print(f"Model config: {NUM_LAYERS} layers, hidden dim {EXPECTED_HIDDEN_DIM}")
     
     # Load metadata
     with open(METADATA_FILE, 'r') as f:
@@ -337,6 +373,7 @@ def create_visualizations(results_by_layer: Dict, category_peaks: Dict):
     
     plt.suptitle('Alignment Artifacts Analysis by Category', fontsize=16)
     plt.tight_layout()
+    OUTPUT_FIGURE.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(OUTPUT_FIGURE, dpi=150)
     print(f"\n📊 Visualization saved to: {OUTPUT_FIGURE}")
 
@@ -362,6 +399,7 @@ def save_results(results_by_layer: Dict, category_peaks: Dict):
         }
     }
     
+    OUTPUT_RESULTS.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_RESULTS, 'w') as f:
         json.dump(results, f, indent=2)
     

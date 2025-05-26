@@ -45,8 +45,12 @@ class ArtifactAnalyzer:
         ])
         
         if batch_dirs:
-            # Check first activation file
-            for step_file in sorted(batch_dirs[0].glob("activations_step_*.npz")):
+            # Check first activation file (handle nested batch directories)
+            activation_files = list(batch_dirs[0].glob("*/activations_step_*.npz"))
+            if not activation_files:
+                activation_files = list(batch_dirs[0].glob("activations_step_*.npz"))
+            
+            for step_file in sorted(activation_files):
                 data = np.load(step_file)
                 # Find highest layer number
                 max_layer = -1
@@ -94,7 +98,10 @@ class ArtifactAnalyzer:
                     batch_offset = batch_num * 100
                     
                     for step in range(20):
-                        step_file = batch_dir / f"activations_step_{step}.npz"
+                        # Handle nested batch directories
+                        step_file = batch_dir / batch_dir.name / f"activations_step_{step}.npz"
+                        if not step_file.exists():
+                            step_file = batch_dir / f"activations_step_{step}.npz"
                         if not step_file.exists():
                             continue
                         

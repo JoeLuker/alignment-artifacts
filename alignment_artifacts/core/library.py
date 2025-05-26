@@ -104,7 +104,8 @@ for i in 0; do
         --prompts-file "$PROMPTS_FILE" \\
         --batch-size 100 \\
         --max-tokens 20 \\
-        --save-activations-dir "$OUTPUT_DIR/batch_$((i + 1))" \\
+        --save-activations \\
+        --activations-dir "$OUTPUT_DIR/batch_$((i + 1))" \\
         --output-dir "$OUTPUT_DIR/batch_$((i + 1))" \\
         --no-compress-activations
 done

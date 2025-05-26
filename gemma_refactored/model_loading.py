@@ -107,20 +107,17 @@ def _get_classes(config: Dict[str, Any]) -> Tuple[Type, Type]:
     )
     
     if is_multimodal:
-        # Use the new Gemma models that can handle multimodal
-        from .gemma_models import Model, ModelArgs
-        
-        # For multimodal models, we need to extract the text config
-        if "text_config" in config:
-            # Merge text config into main config for compatibility
-            text_config = config["text_config"]
-            for k, v in text_config.items():
-                if k not in config:
-                    config[k] = v
-        
+        # Use multimodal implementation
+        from .gemma_multimodal import MultimodalGemmaForCausalLM, MultimodalConfig
+        return MultimodalGemmaForCausalLM, MultimodalConfig
+    
+    # Check for standard Gemma variants
+    model_type = config.get("model_type", "gemma")
+    if model_type in ["gemma", "gemma2"]:
+        from .gemma_models import Gemma as Model, ModelArgs
         return Model, ModelArgs
     
-    # Default to original implementation for backward compatibility
+    # Default to original implementation
     from .model_architecture import Model, ModelArgs
     return Model, ModelArgs
 
@@ -180,6 +177,12 @@ def load_model_weights(model, model_path: Path, config: dict):
             is_quantizable = isinstance(m, (nn.Linear, nn.Embedding))
             has_scales = f"{p}.scales" in weights
             has_biases = f"{p}.biases" in weights
+            
+            # Special handling for multimodal embeddings
+            if "embed_tokens" in p and ("language_model" in p or "text_config" in config):
+                # The embedding might be pre-quantized in multimodal models
+                return has_scales and has_biases
+            
             return is_quantizable and has_scales and has_biases
         
         nn.quantize(
@@ -195,12 +198,23 @@ def load_model_weights(model, model_path: Path, config: dict):
         weights = model.sanitize(weights)
     
     # Additional sanitization for multimodal models
-    if "vision_config" in config:
-        # Remove vision tower weights that we don't support yet
-        vision_keys = [k for k in weights.keys() if "vision" in k]
+    if "vision_config" in config or "text_config" in config:
+        # Remove actual vision implementation weights since we use dummy vision
+        vision_keys = [k for k in weights.keys() if "vision_tower" in k and "embed" in k]
+        projector_keys = [k for k in weights.keys() if "multi_modal_projector" in k]
+        
+        # Keep projector weights but remove vision embeddings
         for k in vision_keys:
-            del weights[k]
-        print(f"Note: Removed {len(vision_keys)} vision-related weights (multimodal not fully supported)")
+            if k in weights:
+                del weights[k]
+        
+        if vision_keys:
+            print(f"Note: Removed {len(vision_keys)} vision embedding weights (using dummy vision tower)")
+        
+        # Log what we're keeping
+        remaining_vision_keys = [k for k in weights.keys() if "vision" in k or "projector" in k]
+        if remaining_vision_keys:
+            print(f"Keeping {len(remaining_vision_keys)} multimodal component weights")
     
     # Filter weights to match model parameters (after potential quantization)
     final_params = dict(tree_flatten(model.parameters()))

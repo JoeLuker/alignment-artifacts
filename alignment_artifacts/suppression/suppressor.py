@@ -183,6 +183,8 @@ class AlignmentArtifactSuppressor:
     def patch_model(self, model):
         """Patch the model's MLP modules to apply suppression."""
         print(f"\n🔧 Patching model with suppression vectors")
+        print(f"   Target layers: {self.target_layers}")
+        print(f"   Available suppression vectors: {list(self.suppression_vectors.keys())}")
         
         for layer_idx in self.target_layers:
             if layer_idx < len(model.layers) and layer_idx in self.suppression_vectors:

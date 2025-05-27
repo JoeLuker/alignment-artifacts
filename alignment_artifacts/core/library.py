@@ -127,6 +127,16 @@ echo "✓ Activation collection complete!"
                 check=True
             )
             print("✓ Activation collection complete!")
+            
+            # Save model config to mark successful collection
+            config_file = cache_dir / "model_config.json"
+            with open(config_file, 'w') as f:
+                json.dump({
+                    "model_name": model_name,
+                    "collected_at": str(Path.cwd()),
+                    "timestamp": str(subprocess.run(["date"], capture_output=True, text=True).stdout.strip())
+                }, f, indent=2)
+            
         except subprocess.CalledProcessError as e:
             print(f"❌ Error collecting activations: {e}")
             print(f"stdout: {e.stdout}")

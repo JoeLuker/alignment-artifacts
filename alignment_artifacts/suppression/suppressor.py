@@ -123,47 +123,66 @@ class AlignmentArtifactSuppressor:
             d for d in activations_dir.iterdir() 
             if d.is_dir() and d.name.startswith("batch_")
         ])
+        print(f"Found {len(batch_dirs)} batch directories in {activations_dir}")
+        
+        # First, load all activation files once
+        loaded_activations = {}
+        for batch_dir in batch_dirs:
+            batch_num = int(batch_dir.name.split('_')[1]) - 1
+            
+            for step in range(20):  # num_steps
+                # Handle nested batch directories
+                step_file = batch_dir / batch_dir.name / f"activations_step_{step}.npz"
+                if not step_file.exists():
+                    step_file = batch_dir / f"activations_step_{step}.npz"
+                if not step_file.exists():
+                    continue
+                    
+                try:
+                    data = np.load(step_file)
+                    loaded_activations[(batch_num, step)] = data
+                    if step == 0 and batch_num == 0:
+                        print(f"  Loaded {step_file.name} with {len(data.files)} keys")
+                except Exception as e:
+                    print(f"  ⚠️  Error loading {step_file}: {e}")
+                    continue
+        
+        print(f"  Loaded {len(loaded_activations)} activation files")
         
         for layer in self.target_layers:
             all_natural = []
             all_artifact = []
             
-            # Collect activations
-            for batch_dir in batch_dirs:
-                batch_num = int(batch_dir.name.split('_')[1]) - 1
+            # Collect activations from loaded data
+            for (batch_num, step), data in loaded_activations.items():
                 batch_offset = batch_num * 100
+                key = f"model.layers.{layer}.mlp.output"
                 
-                for step in range(20):  # num_steps
-                    step_file = batch_dir / f"activations_step_{step}.npz"
-                    if not step_file.exists():
-                        continue
-                        
-                    data = np.load(step_file)
-                    key = f"model.layers.{layer}.mlp.output"
-                    
-                    if key not in data:
-                        continue
-                    
-                    batch_data = data[key]
-                    
-                    # Extract activations
-                    for idx in natural_indices:
-                        if batch_offset <= idx < batch_offset + 100:
-                            local_idx = idx - batch_offset
-                            if local_idx < batch_data.shape[0]:
-                                vec = (batch_data[local_idx, 0, :] 
-                                      if batch_data.ndim == 3 
-                                      else batch_data[local_idx, :])
-                                all_natural.append(vec)
-                    
-                    for idx in artifact_indices:
-                        if batch_offset <= idx < batch_offset + 100:
-                            local_idx = idx - batch_offset
-                            if local_idx < batch_data.shape[0]:
-                                vec = (batch_data[local_idx, 0, :] 
-                                      if batch_data.ndim == 3 
-                                      else batch_data[local_idx, :])
-                                all_artifact.append(vec)
+                if key not in data:
+                    continue
+                
+                batch_data = data[key]
+                
+                # Extract activations
+                for idx in natural_indices:
+                    if batch_offset <= idx < batch_offset + 100:
+                        local_idx = idx - batch_offset
+                        if local_idx < batch_data.shape[0]:
+                            vec = (batch_data[local_idx, 0, :] 
+                                  if batch_data.ndim == 3 
+                                  else batch_data[local_idx, :])
+                            all_natural.append(vec)
+                
+                for idx in artifact_indices:
+                    if batch_offset <= idx < batch_offset + 100:
+                        local_idx = idx - batch_offset
+                        if local_idx < batch_data.shape[0]:
+                            vec = (batch_data[local_idx, 0, :] 
+                                  if batch_data.ndim == 3 
+                                  else batch_data[local_idx, :])
+                            all_artifact.append(vec)
+            
+            print(f"  Layer {layer}: collected {len(all_natural)} natural, {len(all_artifact)} artifact")
             
             if all_natural and all_artifact:
                 # Compute direction (artifact - natural)
@@ -177,8 +196,10 @@ class AlignmentArtifactSuppressor:
                     self.suppression_vectors[layer] = mx.array(
                         direction, dtype=mx.float32
                     )
-                    print(f"Layer {layer}: computed suppression vector "
+                    print(f"  ✓ Layer {layer}: computed suppression vector "
                           f"(norm={norm:.3f})")
+            else:
+                print(f"  ⚠️  Layer {layer}: insufficient data")
     
     def patch_model(self, model):
         """Patch the model's MLP modules to apply suppression."""

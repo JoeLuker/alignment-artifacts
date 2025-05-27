@@ -26,9 +26,15 @@ class MultimodalConfig(ModelArgs):
     
     @classmethod
     def from_dict(cls, params):
-        # First create base ModelArgs
+        # For multimodal models, the actual model params are in text_config
+        if 'text_config' in params:
+            text_params = params['text_config']
+        else:
+            text_params = params
+            
+        # Get base model params from text_config
         import inspect
-        base_params = {k: v for k, v in params.items() 
+        base_params = {k: v for k, v in text_params.items() 
                       if k in inspect.signature(ModelArgs).parameters}
         
         # Create vision config if present
@@ -47,7 +53,7 @@ class MultimodalConfig(ModelArgs):
         
         # Get multimodal specific params
         mm_tokens = params.get('mm_tokens_per_image', 256)
-        mm_emb_dim = params.get('mm_emb_dim', params.get('hidden_size', 3840))
+        mm_emb_dim = params.get('mm_emb_dim', text_params.get('hidden_size', 3840))
         
         return cls(
             **base_params,

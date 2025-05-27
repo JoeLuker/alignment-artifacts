@@ -97,3 +97,6 @@ alignment_artifact_*.json
 
 collected_activations_no_rep/
 collected_text_no_rep/
+
+# Alignment artifacts cache
+alignment_artifacts_cache/

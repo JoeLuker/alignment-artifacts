@@ -107,14 +107,17 @@ def _get_classes(config: Dict[str, Any]) -> Tuple[Type, Type]:
     )
     
     if is_multimodal:
-        # Use multimodal implementation
-        from .gemma_multimodal import MultimodalGemmaForCausalLM, MultimodalConfig
-        return MultimodalGemmaForCausalLM, MultimodalConfig
+        # For now, use standard Gemma for multimodal models
+        # TODO: Implement proper multimodal support
+        print("Note: Using standard Gemma implementation for multimodal model")
+        # Don't update config here - we'll handle it in the model loading
+        from .gemma_models import Model, ModelArgs
+        return Model, ModelArgs
     
     # Check for standard Gemma variants
     model_type = config.get("model_type", "gemma")
     if model_type in ["gemma", "gemma2"]:
-        from .gemma_models import Gemma as Model, ModelArgs
+        from .gemma_models import Model, ModelArgs
         return Model, ModelArgs
     
     # Default to original implementation
@@ -167,6 +170,19 @@ def load_model_weights(model, model_path: Path, config: dict):
         file_weights = mx.load(str(weight_file))
         weights.update(file_weights)
     
+    # Handle multimodal model weight prefixes
+    if any(k.startswith("language_model.") for k in weights.keys()):
+        print("Detected multimodal model weights, remapping keys...")
+        remapped_weights = {}
+        for k, v in weights.items():
+            if k.startswith("language_model."):
+                # Remove the language_model. prefix
+                new_key = k.replace("language_model.", "", 1)
+                remapped_weights[new_key] = v
+            else:
+                remapped_weights[k] = v
+        weights = remapped_weights
+    
     # Handle quantization if present
     quantization = config.get("quantization")
     if quantization and isinstance(quantization, dict):
@@ -181,7 +197,8 @@ def load_model_weights(model, model_path: Path, config: dict):
             # Special handling for multimodal embeddings
             if "embed_tokens" in p and ("language_model" in p or "text_config" in config):
                 # The embedding might be pre-quantized in multimodal models
-                return has_scales and has_biases
+                print(f"Note: Quantized embeddings detected, keeping original weight shape")
+                return False  # Don't re-quantize already quantized embeddings
             
             return is_quantizable and has_scales and has_biases
         

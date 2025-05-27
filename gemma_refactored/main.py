@@ -4,6 +4,7 @@ Main script that integrates all components for complete Gemma model functionalit
 
 import time
 import argparse
+import json
 from pathlib import Path
 from typing import Optional
 import mlx.core as mx
@@ -31,13 +32,22 @@ def load_model(model_path: Path, model_config: dict = {}) -> nn.Module:
     # Get model classes
     model_class, model_args_class = _get_classes(config)
     
+    # For multimodal models, use text_config for model creation
+    model_config_for_creation = config.copy()
+    if 'text_config' in config:
+        print("Note: Loading multimodal model in text-only mode")
+        model_config_for_creation = config['text_config'].copy()
+        # Preserve quantization settings
+        if 'quantization' in config:
+            model_config_for_creation['quantization'] = config['quantization']
+    
     # Create model arguments
-    model_args = model_args_class.from_dict(config)
+    model_args = model_args_class.from_dict(model_config_for_creation)
     
     # Create model
     model = model_class(model_args)
     
-    # Load weights (pass config for quantization)
+    # Load weights (pass original config for weight filtering)
     model = load_model_weights(model, model_path, config)
     
     # Add cache creation method

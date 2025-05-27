@@ -23,6 +23,19 @@ class KVCache:
         self.offset = 0
         self.batch_size = None
         self.dtype = None
+    
+    def __iter__(self):
+        """Make cache iterable to support tuple unpacking for gemma_models.py"""
+        return iter((self.keys, self.values))
+    
+    def __getitem__(self, idx):
+        """Support indexing for tuple-like access"""
+        if idx == 0:
+            return self.keys
+        elif idx == 1:
+            return self.values
+        else:
+            raise IndexError("KVCache only has 2 elements (keys, values)")
 
     def update_and_fetch(self, keys, values):
         """Update cache and return full context."""

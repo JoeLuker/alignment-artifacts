@@ -93,11 +93,19 @@ class Attention(nn.Module):
         values = values.reshape(B, L, self.n_kv_heads, -1).transpose(0, 2, 1, 3)
 
         if cache is not None:
-            key_cache, value_cache = cache
-            queries = self.rope(queries, offset=key_cache.shape[2])
-            keys = self.rope(keys, offset=key_cache.shape[2])
-            keys = mx.concatenate([key_cache, keys], axis=2)
-            values = mx.concatenate([value_cache, values], axis=2)
+            # Handle both KVCache objects and tuple format
+            if hasattr(cache, 'update_and_fetch'):
+                # KVCache object - use its method
+                queries = self.rope(queries, offset=cache.offset)
+                keys = self.rope(keys, offset=cache.offset) 
+                keys, values = cache.update_and_fetch(keys, values)
+            else:
+                # Tuple format - original logic
+                key_cache, value_cache = cache
+                queries = self.rope(queries, offset=key_cache.shape[2])
+                keys = self.rope(keys, offset=key_cache.shape[2])
+                keys = mx.concatenate([key_cache, keys], axis=2)
+                values = mx.concatenate([value_cache, values], axis=2)
         else:
             queries = self.rope(queries)
             keys = self.rope(keys)

@@ -99,29 +99,26 @@ def _get_classes(config: Dict[str, Any]) -> Tuple[Type, Type]:
     """
     Get the model and model args classes based on the model type.
     """
-    # Check if it's a multimodal model
-    is_multimodal = (
-        "vision_config" in config or 
-        "text_config" in config or
-        "gemma3forconditionalgenerationconfig" in str(config.get("architectures", [])).lower()
+    
+    # Check if this is Gemma-2 or Gemma-3
+    model_type = config.get("model_type", "")
+    architectures = config.get("architectures", [])
+    
+    # Determine if this is Gemma-2 (without QK-norm) or Gemma-3 (with QK-norm)
+    is_gemma2 = (
+        model_type == "gemma2" or 
+        any("Gemma2" in arch for arch in architectures)
     )
     
-    if is_multimodal:
-        # For now, use standard Gemma for multimodal models
-        # TODO: Implement proper multimodal support
-        print("Note: Using standard Gemma implementation for multimodal model")
-        # Don't update config here - we'll handle it in the model loading
-        from .gemma_models import Model, ModelArgs
-        return Model, ModelArgs
+    if is_gemma2:
+        # Use Gemma-2 compatible architecture (without q_norm/k_norm)
+        from .model_architecture_gemma2 import Model, ModelArgs
+        print("Using Gemma-2 compatible architecture (no QK-norm)")
+    else:
+        # Use Gemma-3 architecture (with q_norm/k_norm)
+        from .model_architecture import Model, ModelArgs
+        print("Using Gemma-3 architecture (with QK-norm)")
     
-    # Check for standard Gemma variants
-    model_type = config.get("model_type", "gemma")
-    if model_type in ["gemma", "gemma2"]:
-        from .gemma_models import Model, ModelArgs
-        return Model, ModelArgs
-    
-    # Default to original implementation
-    from .model_architecture import Model, ModelArgs
     return Model, ModelArgs
 
 
@@ -158,7 +155,6 @@ def load_model_weights(model, model_path: Path, config: dict):
     import mlx.core as mx
     import mlx.nn as nn
     from mlx.utils import tree_unflatten, tree_flatten
-    from .quantized_embedding import QuantizedEmbedding
     
     weight_files = list(model_path.glob("*.safetensors"))
     if not weight_files:
@@ -171,70 +167,16 @@ def load_model_weights(model, model_path: Path, config: dict):
         file_weights = mx.load(str(weight_file))
         weights.update(file_weights)
     
-    # Handle multimodal model weight prefixes
-    if any(k.startswith("language_model.") for k in weights.keys()):
-        print("Detected multimodal model weights, remapping keys...")
-        remapped_weights = {}
-        for k, v in weights.items():
-            if k.startswith("language_model."):
-                # Remove the language_model. prefix
-                new_key = k.replace("language_model.", "", 1)
-                remapped_weights[new_key] = v
-            else:
-                remapped_weights[k] = v
-        weights = remapped_weights
-    
-    # Check if embeddings are pre-quantized incompatibly
-    embed_weight_key = "model.embed_tokens.weight"
-    embed_scales_key = "model.embed_tokens.scales"
-    embed_biases_key = "model.embed_tokens.biases"
-    
-    # Only do this for multimodal models where embedding quantization is incompatible
-    if embed_weight_key in weights and embed_scales_key in weights and ("vision_config" in config or "text_config" in config):
-        embed_shape = weights[embed_weight_key].shape
-        expected_hidden_size = config.get('hidden_size') or config.get('text_config', {}).get('hidden_size')
-        
-        # Check if this looks like packed 4-bit quantization (8x compression)
-        if embed_shape[1] * 8 == expected_hidden_size:
-            print(f"Detected incompatible pre-quantized embeddings: {embed_shape[1]} dims (expected {expected_hidden_size})")
-            
-            # Replace the embedding layer with quantized version
-            if hasattr(model.model, 'embed_tokens'):
-                quantized_embed = QuantizedEmbedding(
-                    num_embeddings=embed_shape[0],
-                    dims=expected_hidden_size,
-                    group_size=64,
-                    bits=4,
-                    weight=weights[embed_weight_key],
-                    scales=weights[embed_scales_key],
-                    biases=weights[embed_biases_key]
-                )
-                
-                # Replace the embedding layer
-                model.model.embed_tokens = quantized_embed
-                print("Replaced embedding layer with quantized version for multimodal model")
-    
     # Handle quantization if present
     quantization = config.get("quantization")
     if quantization and isinstance(quantization, dict):
         print(f"Applying quantization: {quantization}")
         
         def class_predicate(p, m):
-            # Skip our custom quantized embedding
-            if isinstance(m, QuantizedEmbedding):
-                return False
-                
             # Check if layer is quantizable and has required weight components
             is_quantizable = isinstance(m, (nn.Linear, nn.Embedding))
             has_scales = f"{p}.scales" in weights
             has_biases = f"{p}.biases" in weights
-            
-            # Special handling for multimodal embeddings
-            if "embed_tokens" in p and ("language_model" in p or "text_config" in config):
-                # The embedding might be pre-quantized in multimodal models
-                print(f"Note: Quantized embeddings detected, keeping original weight shape")
-                return False  # Don't re-quantize already quantized embeddings
-            
             return is_quantizable and has_scales and has_biases
         
         nn.quantize(
@@ -249,32 +191,11 @@ def load_model_weights(model, model_path: Path, config: dict):
     if hasattr(model, 'sanitize'):
         weights = model.sanitize(weights)
     
-    # Additional sanitization for multimodal models
-    if "vision_config" in config or "text_config" in config:
-        # Remove actual vision implementation weights since we use dummy vision
-        vision_keys = [k for k in weights.keys() if "vision_tower" in k and "embed" in k]
-        projector_keys = [k for k in weights.keys() if "multi_modal_projector" in k]
-        
-        # Keep projector weights but remove vision embeddings
-        for k in vision_keys:
-            if k in weights:
-                del weights[k]
-        
-        if vision_keys:
-            print(f"Note: Removed {len(vision_keys)} vision embedding weights (using dummy vision tower)")
-        
-        # Log what we're keeping
-        remaining_vision_keys = [k for k in weights.keys() if "vision" in k or "projector" in k]
-        if remaining_vision_keys:
-            print(f"Keeping {len(remaining_vision_keys)} multimodal component weights")
     
     # Filter weights to match model parameters (after potential quantization)
     final_params = dict(tree_flatten(model.parameters()))
-    
-    # Filter weights normally - the QuantizedEmbedding parameters should be in final_params
     filtered_weights = {k: v for k, v in weights.items() if k in final_params}
-    
-    ignored_weights = {k: v for k, v in weights.items() if k not in filtered_weights and k not in [embed_weight_key, embed_scales_key, embed_biases_key]}
+    ignored_weights = {k: v for k, v in weights.items() if k not in final_params}
     
     if ignored_weights:
         print(f"Warning: Ignoring {len(ignored_weights)} weight(s) not found in model parameters: {list(ignored_weights.keys())[:5]}...")
@@ -283,16 +204,7 @@ def load_model_weights(model, model_path: Path, config: dict):
         raise ValueError("No matching weights found between loaded files and model parameters. Check weight keys and model structure.")
     
     # Load filtered weights
-    try:
-        model.load_weights(list(filtered_weights.items()))
-        print(f"Successfully loaded {len(filtered_weights)} weight tensors")
-    except ValueError as e:
-        if "embed_tokens.weight" in str(e) and "Expected shape" in str(e):
-            raise ValueError(
-                f"Multimodal model embeddings are not compatible. {str(e)}\n"
-                "This model uses pre-quantized embeddings which are not yet supported.\n"
-                "Please use a text-only model like 'mlx-community/gemma-3-1b-it-qat-4bit' instead."
-            )
-        raise
+    model.load_weights(list(filtered_weights.items()))
+    print(f"Successfully loaded {len(filtered_weights)} weight tensors")
     model.eval()
     return model

@@ -6,6 +6,12 @@ import numpy as np
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 import mlx.core as mx
+import os
+import logging
+
+# Set up logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG if os.environ.get('ACTIVATION_DEBUG', '').lower() == 'true' else logging.INFO)
 
 
 class ActivationStore:
@@ -15,6 +21,8 @@ class ActivationStore:
         self.activations: Dict[str, Any] = {}
         self.enabled: bool = True
         self._capture_this_step = True  # Control capture per step
+        self.debug = os.environ.get('ACTIVATION_DEBUG', '').lower() == 'true'
+        self._expected_mlp_layers = 26  # Expected number of MLP layers for 1B model
 
     def reset(self):
         """Clear all stored activations for the next step."""
@@ -32,7 +40,7 @@ class ActivationStore:
                 # Store the tensor directly. Evaluation happens during saving.
                 self.activations[name] = tensor
             except Exception as e:
-                print(f"Warning: Could not register activation '{name}'. Error: {e}")
+                logger.warning(f"Could not register activation '{name}'. Error: {e}")
 
     def disable(self):
         """Disable activation collection entirely."""
@@ -44,7 +52,60 @@ class ActivationStore:
 
     def get_captured_activations(self) -> Dict[str, Any]:
         """Get all activations captured so far in the current step."""
+        if self.debug:
+            self._check_invariants()
         return self.activations
+    
+    def _check_invariants(self):
+        """Check invariants about captured activations when debug is enabled."""
+        if not self.debug:
+            return
+            
+        # Count MLP outputs
+        mlp_outputs = [k for k in self.activations.keys() if 'mlp.output' in k]
+        mlp_count = len(mlp_outputs)
+        
+        # Check we have the expected number of MLP outputs
+        if mlp_count != self._expected_mlp_layers and mlp_count > 0:
+            logger.warning(f"Expected {self._expected_mlp_layers} MLP outputs, found {mlp_count}")
+            missing = set(range(self._expected_mlp_layers)) - {i for i in range(self._expected_mlp_layers) if f'model.layers.{i}.mlp.output' in self.activations}
+            logger.warning(f"Missing layers: {missing}")
+        
+        # Check activation shapes and types
+        for name, activation in self.activations.items():
+            if 'mlp.output' in name and isinstance(activation, mx.array):
+                # MLP outputs should have shape (batch, seq_len, hidden_size)
+                if len(activation.shape) != 3:
+                    logger.warning(f"MLP output {name} has unexpected shape: {activation.shape}")
+                
+                # Check for NaN/Inf
+                if mx.any(mx.isnan(activation)) or mx.any(mx.isinf(activation)):
+                    logger.warning(f"MLP output {name} contains NaN or Inf values!")
+        
+        # Log summary
+        if self.debug:
+            logger.debug(f"Captured {len(self.activations)} total activations")
+            logger.debug(f"MLP outputs: {mlp_count}/{self._expected_mlp_layers}")
+            
+            # Count by type
+            type_counts = {}
+            for name in self.activations.keys():
+                if '.mlp.' in name:
+                    if '.output' in name:
+                        key = 'mlp.output'
+                    elif '.input' in name:
+                        key = 'mlp.input'
+                    else:
+                        key = 'mlp.other'
+                elif '.self_attn.' in name:
+                    key = 'self_attn'
+                elif 'layernorm' in name:
+                    key = 'layernorm'
+                else:
+                    key = 'other'
+                type_counts[key] = type_counts.get(key, 0) + 1
+            
+            logger.debug(f"Activation types: {type_counts}")
 
 
 # Global activation store instance
@@ -67,13 +128,22 @@ def save_activations(
     total_size_mb = 0
     skipped_count = 0
     error_count = 0
+    debug = os.environ.get('ACTIVATION_DEBUG', '').lower() == 'true'
     
-    print(f"Preparing to save {len(activations)} activations for step {step}...")
+    logger.info(f"Preparing to save {len(activations)} activations for step {step}...")
+    
+    if debug:
+        # Count MLP outputs before saving
+        mlp_outputs_before = [k for k in activations.keys() if 'mlp.output' in k]
+        logger.debug(f"MLP outputs before save: {len(mlp_outputs_before)}")
     
     for name, tensor in activations.items():
         try:
             if isinstance(tensor, mx.array):
                 mx.eval(tensor)  # Evaluate JUST before saving
+                # Handle bfloat16 by converting to float32 first
+                if tensor.dtype == mx.bfloat16:
+                    tensor = tensor.astype(mx.float32)
                 np_array = np.array(tensor)
             elif isinstance(tensor, (np.ndarray, list, tuple, int, float, bool, str)):
                 np_array = np.array(tensor)  # Handles primitives and strings
@@ -81,7 +151,7 @@ def save_activations(
                 try:  # Attempt conversion for other types
                     np_array = np.array(tensor)
                 except Exception:
-                    print(f"Skipping unsupported activation type '{name}' (type: {type(tensor)})")
+                    logger.debug(f"Skipping unsupported activation type '{name}' (type: {type(tensor)})")
                     skipped_count += 1
                     continue
 
@@ -89,11 +159,11 @@ def save_activations(
             size_bytes = getattr(np_array, 'nbytes', 0)  # Estimate size safely
             total_size_mb += size_bytes / (1024 * 1024)
         except Exception as e:
-            print(f"Error processing activation '{name}' (type: {type(tensor)}): {e}")
+            logger.error(f"Error processing activation '{name}' (type: {type(tensor)}): {e}")
             error_count += 1
 
     if not numpy_activations:
-        print(f"No numeric/convertible activations to save for step {step}.")
+        logger.warning(f"No numeric/convertible activations to save for step {step}.")
         return
 
     try:
@@ -101,13 +171,22 @@ def save_activations(
             np.savez_compressed(filepath, **numpy_activations)
         else:
             np.savez(filepath, **numpy_activations)
-        print(f"Saved {len(numpy_activations)} activations ({total_size_mb:.2f} MB) to {filepath}")
+        logger.info(f"Saved {len(numpy_activations)} activations ({total_size_mb:.2f} MB) to {filepath}")
         if skipped_count > 0: 
-            print(f"Skipped {skipped_count} non-convertible activations.")
+            logger.info(f"Skipped {skipped_count} non-convertible activations.")
         if error_count > 0: 
-            print(f"Encountered errors processing {error_count} activations.")
+            logger.warning(f"Encountered errors processing {error_count} activations.")
+            
+        if debug:
+            # Count MLP outputs after saving
+            mlp_outputs_after = [k for k in numpy_activations.keys() if 'mlp.output' in k]
+            logger.debug(f"MLP outputs after save: {len(mlp_outputs_after)}")
+            if len(mlp_outputs_after) < len(mlp_outputs_before):
+                logger.warning(f"Lost MLP outputs during save!")
+                missing = set(mlp_outputs_before) - set(mlp_outputs_after)
+                logger.warning(f"Missing: {missing}")
     except Exception as e:
-        print(f"Error saving activations to {filepath}: {e}")
+        logger.error(f"Error saving activations to {filepath}: {e}")
 
 
 def scaled_dot_product_attention_with_activations(

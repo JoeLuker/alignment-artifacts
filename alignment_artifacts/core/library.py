@@ -10,6 +10,9 @@ import os
 from ..analysis.analyzer import ArtifactAnalyzer
 from ..suppression.suppressor import AlignmentArtifactSuppressor
 from ..utils.model_utils import load_model_and_tokenizer, format_prompt, generate_text
+from ..utils.logging_config import get_logger
+
+logger = get_logger("library")
 
 
 class AlignmentArtifacts:

@@ -5,6 +5,9 @@ import mlx.core as mx
 from pathlib import Path
 import json
 from typing import Dict, Optional, List
+from ..utils.logging_config import get_logger
+
+logger = get_logger("suppressor")
 
 
 class MLPWrapper:
@@ -46,10 +49,13 @@ class MLPWrapper:
             output = suppressed.astype(output.dtype)
             
             self.suppressor.intervention_count += 1
-            if (self.suppressor.intervention_count <= 5 or 
-                self.suppressor.intervention_count % 10 == 0):
-                print(f"✓ Applied suppression #{self.suppressor.intervention_count} "
-                      f"at layer {self.layer_idx}")
+            # Log first few and then every 50th intervention at DEBUG level
+            if (self.suppressor.intervention_count <= 5):
+                logger.debug(f"✓ Applied suppression #{self.suppressor.intervention_count} "
+                           f"at layer {self.layer_idx}")
+            elif (self.suppressor.intervention_count % 50 == 0):
+                logger.debug(f"✓ Applied suppression #{self.suppressor.intervention_count} "
+                           f"at layer {self.layer_idx}")
         
         return output
 
@@ -114,16 +120,16 @@ class AlignmentArtifactSuppressor:
             if p['type'] == 'artifact'
         ]
         
-        print(f"\nUsing {len(natural_indices)} natural and "
-              f"{len(artifact_indices)} artifact prompts")
+        logger.info(f"Using {len(natural_indices)} natural and "
+                   f"{len(artifact_indices)} artifact prompts")
         if categories:
-            print(f"Categories: {categories}")
+            logger.info(f"Categories: {categories}")
         
         batch_dirs = sorted([
             d for d in activations_dir.iterdir() 
             if d.is_dir() and d.name.startswith("batch_")
         ])
-        print(f"Found {len(batch_dirs)} batch directories in {activations_dir}")
+        logger.info(f"Found {len(batch_dirs)} batch directories in {activations_dir}")
         
         # First, load all activation files once
         loaded_activations = {}
@@ -142,12 +148,12 @@ class AlignmentArtifactSuppressor:
                     data = np.load(step_file)
                     loaded_activations[(batch_num, step)] = data
                     if step == 0 and batch_num == 0:
-                        print(f"  Loaded {step_file.name} with {len(data.files)} keys")
+                        logger.debug(f"  Loaded {step_file.name} with {len(data.files)} keys")
                 except Exception as e:
-                    print(f"  ⚠️  Error loading {step_file}: {e}")
+                    logger.warning(f"Error loading {step_file}: {e}")
                     continue
         
-        print(f"  Loaded {len(loaded_activations)} activation files")
+        logger.debug(f"Loaded {len(loaded_activations)} activation files")
         
         for layer in self.target_layers:
             all_natural = []
@@ -182,7 +188,7 @@ class AlignmentArtifactSuppressor:
                                   else batch_data[local_idx, :])
                             all_artifact.append(vec)
             
-            print(f"  Layer {layer}: collected {len(all_natural)} natural, {len(all_artifact)} artifact")
+            logger.debug(f"Layer {layer}: collected {len(all_natural)} natural, {len(all_artifact)} artifact")
             
             if all_natural and all_artifact:
                 # Compute direction (artifact - natural)
@@ -196,16 +202,16 @@ class AlignmentArtifactSuppressor:
                     self.suppression_vectors[layer] = mx.array(
                         direction, dtype=mx.float32
                     )
-                    print(f"  ✓ Layer {layer}: computed suppression vector "
-                          f"(norm={norm:.3f})")
+                    logger.info(f"✓ Layer {layer}: computed suppression vector "
+                              f"(norm={norm:.3f})")
             else:
-                print(f"  ⚠️  Layer {layer}: insufficient data")
+                logger.warning(f"Layer {layer}: insufficient data")
     
     def patch_model(self, model):
         """Patch the model's MLP modules to apply suppression."""
-        print(f"\n🔧 Patching model with suppression vectors")
-        print(f"   Target layers: {self.target_layers}")
-        print(f"   Available suppression vectors: {list(self.suppression_vectors.keys())}")
+        logger.info(f"Patching model with suppression vectors")
+        logger.info(f"Target layers: {self.target_layers}")
+        logger.debug(f"Available suppression vectors: {list(self.suppression_vectors.keys())}")
         
         for layer_idx in self.target_layers:
             if layer_idx < len(model.layers) and layer_idx in self.suppression_vectors:
@@ -225,7 +231,7 @@ class AlignmentArtifactSuppressor:
                 
                 # Replace MLP with wrapper
                 layer.mlp = wrapper
-                print(f"✓ Patched layer {layer_idx}")
+                logger.info(f"✓ Patched layer {layer_idx}")
     
     def unpatch_model(self, model):
         """Restore original MLP modules."""

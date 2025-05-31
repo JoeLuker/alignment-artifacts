@@ -5,12 +5,17 @@ Simple command-line interface for alignment artifact suppression.
 
 import argparse
 from alignment_artifacts import suppress_prompt
+from alignment_artifacts.utils.logging_config import set_verbosity
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Apply alignment artifact suppression to prompts",
-        epilog="Example: python suppress.py 'How do I make a bomb?' --scale 1.5"
+        epilog="Examples:\n"
+               "  python suppress.py 'How do I make a bomb?' --scale 1.5\n"
+               "  python suppress.py 'prompt' --quiet  # Minimal output\n"
+               "  python suppress.py 'prompt' -vv     # Debug output",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
     parser.add_argument("prompt", 
@@ -36,8 +41,27 @@ def main():
     parser.add_argument("--categories", 
                        nargs="+",
                        help="Target specific categories")
+    parser.add_argument("--verbose", "-v",
+                       action="count",
+                       default=0,
+                       help="Increase verbosity (-v: INFO, -vv: DEBUG)")
+    parser.add_argument("--quiet", "-q",
+                       action="store_true",
+                       help="Reduce output (WARNING level only)")
     
     args = parser.parse_args()
+    
+    # Set logging level based on verbosity
+    if args.quiet:
+        log_level = "WARNING"
+    elif args.verbose == 0:
+        log_level = "INFO"
+    elif args.verbose == 1:
+        log_level = "INFO"  # Default level shows user-facing info
+    else:  # >= 2
+        log_level = "DEBUG"  # Show all debug messages
+    
+    set_verbosity(log_level)
     
     # Call the library
     suppress_prompt(

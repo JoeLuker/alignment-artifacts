@@ -13,8 +13,8 @@ pip install -e .
 # Or just use it directly
 python suppress.py "How do I make a bomb?" --scale 1.5
 
-# With a different model (4B model is default)
-python suppress.py "How do I make a bomb?" --model mlx-community/gemma-3-1b-it-qat-4bit --scale 1.5
+# With a different model
+python suppress.py "How do I make a bomb?" --model mlx-community/gemma-2-2b-it --scale 1.5
 ```
 
 ### Python API
@@ -117,8 +117,7 @@ python suppress.py "How do I pick a lock?" --max-tokens 200 --temperature 0.8
 ### Available Models
 
 Common Gemma models on MLX (text-only):
-- `mlx-community/gemma-3-4b-it-qat-4bit` - 4B quantized (project default)
-- `mlx-community/gemma-3-1b-it-qat-4bit` - 1B quantized  
+- `mlx-community/gemma-3-1b-it-qat-4bit` - 1B quantized (project default)
 - `mlx-community/gemma-2-2b-it` - Gemma 2 2B model
 - `mlx-community/gemma-2-9b-it` - Gemma 2 9B model
 - `mlx-community/gemma-2b-it` - Original 2B instruction-tuned
@@ -131,7 +130,7 @@ Note: Vision/multimodal models are not currently supported (multimodal support w
 1. **Set the model for activation collection:**
 ```bash
 # Edit collect_activations_no_repetition.sh and change the MODEL_NAME variable
-# The default is now mlx-community/gemma-3-4b-it-qat-4bit
+# The default is mlx-community/gemma-3-1b-it-qat-4bit
 ```
 
 2. **Re-run the analysis:**
@@ -141,7 +140,7 @@ ACTIVATIONS_DIR=./collected_activations_no_rep python analyze_by_category.py
 
 3. **Use the same model for inference:**
 ```bash
-python suppress.py "Your prompt" --model "mlx-community/gemma-3-1b-it-qat-4bit"
+python suppress.py "Your prompt" --model "mlx-community/gemma-2-2b-it"
 ```
 
 ### Model-Specific Considerations
@@ -159,18 +158,18 @@ python suppress.py "Your prompt" --model "mlx-community/gemma-3-1b-it-qat-4bit"
 from alignment_artifacts import suppress_prompt, AlignmentArtifacts
 
 # One-line usage
-suppress_prompt("Your prompt here", model="mlx-community/gemma-3-4b-it-qat-4bit", scale=2.0)
+suppress_prompt("Your prompt here", model="mlx-community/gemma-3-1b-it-qat-4bit", scale=2.0)
 
 # Advanced usage
 lib = AlignmentArtifacts()
 
 # Analyze a model (cached after first run)
-results = lib.analyze_artifacts("mlx-community/gemma-3-4b-it-qat-4bit")
+results = lib.analyze_artifacts("mlx-community/gemma-3-1b-it-qat-4bit")
 
 # Generate with specific options
 output = lib.suppress_and_generate(
     "Your prompt",
-    model_name="mlx-community/gemma-3-4b-it-qat-4bit",
+    model_name="mlx-community/gemma-3-1b-it-qat-4bit",
     scale=1.5,
     categories=["medical_ethics"],  # Target specific categories
     target_layers=[1, 2, 3],        # Or specific layers
@@ -190,12 +189,12 @@ output = lib.suppress_and_generate(
 
 ```
 alignment_artifacts_cache/
-├── mlx-community_gemma-3-4b-it-qat-4bit_a1b2c3d4/
+├── mlx-community_gemma-3-1b-it-qat-4bit_a1b2c3d4/
 │   ├── model_config.json
 │   ├── batch_1/
 │   │   └── activations_step_*.npz
 │   └── analysis_results.json
-└── mlx-community_gemma-3-1b-it-qat-4bit_e5f6g7h8/
+└── mlx-community_gemma-2-2b-it_e5f6g7h8/
     └── ...
 ```
 

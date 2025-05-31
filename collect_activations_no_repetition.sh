@@ -14,7 +14,7 @@ fi
 
 MODEL_NAME="mlx-community/gemma-3-1b-it-qat-4bit"
 MAX_TOKENS=20
-BATCH_SIZE=100
+BATCH_SIZE=10
 
 mkdir -p "$RAW_ACTIVATIONS_DIR"
 mkdir -p "$TEXT_RESULTS_DIR"

@@ -13,7 +13,7 @@ from .model_architecture import create_attention_mask, create_additive_causal_ma
 
 class KVCache:
     """Key-Value cache for efficient generation."""
-    
+
     def __init__(self, head_dim, step=256, max_size: Optional[int] = None):
         self.head_dim = head_dim
         self.step = step
@@ -23,11 +23,11 @@ class KVCache:
         self.offset = 0
         self.batch_size = None
         self.dtype = None
-    
+
     def __iter__(self):
         """Make cache iterable to support tuple unpacking for gemma_models.py"""
         return iter((self.keys, self.values))
-    
+
     def __getitem__(self, idx):
         """Support indexing for tuple-like access"""
         if idx == 0:
@@ -67,8 +67,12 @@ class KVCache:
             num_to_keep = self.offset - num_to_discard
             if num_to_keep > 0:
                 mx.eval(self.keys, self.values)  # Sync before shift
-                self.keys[..., :num_to_keep, :] = self.keys[..., num_to_discard : self.offset, :]
-                self.values[..., :num_to_keep, :] = self.values[..., num_to_discard : self.offset, :]
+                self.keys[..., :num_to_keep, :] = self.keys[
+                    ..., num_to_discard : self.offset, :
+                ]
+                self.values[..., :num_to_keep, :] = self.values[
+                    ..., num_to_discard : self.offset, :
+                ]
                 self.offset = num_to_keep
             else:
                 self.offset = 0  # Discarded everything
@@ -82,10 +86,10 @@ class KVCache:
 
         return self.keys[..., : self.offset, :], self.values[..., : self.offset, :]
 
-    def is_trimmable(self): 
+    def is_trimmable(self):
         return True
-    
-    def trim(self, n): 
+
+    def trim(self, n):
         n = min(self.offset, n)
         self.offset -= n
         return n
@@ -96,7 +100,7 @@ def top_p_sampling(logits, top_p, temp=1.0):
     logits = logits.astype(mx.float32)  # Use float32 for stability
     if temp == 0:  # Handle deterministic case first
         return mx.argmax(logits, axis=-1, keepdims=True)
-    if temp != 1.0: 
+    if temp != 1.0:
         logits = logits / temp
 
     probs = mx.softmax(logits, axis=-1)
@@ -107,16 +111,21 @@ def top_p_sampling(logits, top_p, temp=1.0):
     # Shift mask to include the first element that exceeds top_p
     mask = mx.concatenate([mx.zeros_like(mask[..., :1]), mask[..., :-1]], axis=-1)
     probs_filtered = mx.where(mask, mx.zeros_like(sorted_probs), sorted_probs)
-    probs_normalized = probs_filtered / (mx.sum(probs_filtered, axis=-1, keepdims=True) + 1e-9)
+    probs_normalized = probs_filtered / (
+        mx.sum(probs_filtered, axis=-1, keepdims=True) + 1e-9
+    )
     indices = mx.random.categorical(mx.log(probs_normalized + 1e-9))
     selected_indices = mx.take_along_axis(sorted_indices, indices[..., None], axis=-1)
     return selected_indices.astype(mx.int32)
 
 
-def apply_repetition_penalty(logits: mx.array, generated_tokens: List[List[int]], penalty: float):
+def apply_repetition_penalty(
+    logits: mx.array, generated_tokens: List[List[int]], penalty: float
+):
     """
     Apply repetition penalty to specific logits based on the given context.
-    
+    Vectorized implementation for better performance.
+
     Args:
         logits: [batch_size, vocab_size] logits to penalize
         generated_tokens: List[List[int]] - list of token sequences for each batch item
@@ -126,26 +135,29 @@ def apply_repetition_penalty(logits: mx.array, generated_tokens: List[List[int]]
         return logits
 
     batch_size, vocab_size = logits.shape
-    penalized_logits = mx.array(logits)  # Work on a copy
-
-    # Process each sequence in the batch
+    
+    # Create a mask for tokens that need penalty
+    penalty_mask = mx.zeros((batch_size, vocab_size), dtype=mx.bool_)
+    
+    # Build the mask for all sequences at once
     for i in range(min(batch_size, len(generated_tokens))):
-        if not generated_tokens[i]:
-            continue
-            
-        # Get unique tokens for this sequence
-        unique_tokens = list(set(generated_tokens[i]))
-        valid_indices = [idx for idx in unique_tokens if 0 <= idx < vocab_size]
-        
-        if valid_indices:
-            for idx in valid_indices:
-                selected_logit = penalized_logits[i, idx]
-                # Apply penalty (> 0 divide, <= 0 multiply)
-                penalized_value = mx.where(selected_logit > 0, 
-                                         selected_logit / penalty, 
-                                         selected_logit * penalty)
-                penalized_logits[i, idx] = penalized_value
-
+        if generated_tokens[i]:
+            unique_tokens = list(set(generated_tokens[i]))
+            valid_indices = [idx for idx in unique_tokens if 0 <= idx < vocab_size]
+            if valid_indices:
+                penalty_mask[i, valid_indices] = True
+    
+    # Vectorized penalty application
+    # Apply penalty: divide positive logits, multiply negative logits
+    positive_mask = (logits > 0) & penalty_mask
+    negative_mask = (logits <= 0) & penalty_mask
+    
+    penalized_logits = mx.where(
+        positive_mask,
+        logits / penalty,
+        mx.where(negative_mask, logits * penalty, logits)
+    )
+    
     return penalized_logits
 
 
@@ -190,7 +202,9 @@ def generate_step(
                 for idx, val in zip(valid_indices.tolist(), valid_values.tolist()):
                     bias_vector[:, idx] += val
                 current_logits = current_logits + bias_vector
-                activation_store.register(f"{step_name}.sample.biased_logits", current_logits)
+                activation_store.register(
+                    f"{step_name}.sample.biased_logits", current_logits
+                )
 
         # Calculate softmax probabilities (use float32 for stability)
         softmax_probs = mx.softmax(current_logits.astype(mx.float32), axis=-1)
@@ -201,9 +215,15 @@ def generate_step(
             tokens = mx.argmax(current_logits, axis=-1, keepdims=True)
         else:
             scaled_logits = current_logits / temp
-            activation_store.register(f"{step_name}.sample.scaled_logits", scaled_logits)
-            if top_p > 0.0 and top_p < 1.0:  # Ensure top_p is within (0, 1) for top-p sampling
-                tokens = top_p_sampling(scaled_logits, top_p, temp=1.0)  # Temp already applied
+            activation_store.register(
+                f"{step_name}.sample.scaled_logits", scaled_logits
+            )
+            if (
+                top_p > 0.0 and top_p < 1.0
+            ):  # Ensure top_p is within (0, 1) for top-p sampling
+                tokens = top_p_sampling(
+                    scaled_logits, top_p, temp=1.0
+                )  # Temp already applied
             else:
                 tokens = mx.random.categorical(scaled_logits)
                 tokens = mx.expand_dims(tokens, axis=-1)
@@ -219,7 +239,7 @@ def generate_step(
     activation_store.register("generate.initial_prompt", y)
 
     # Setup KV cache
-    if hasattr(model, 'make_cache') and callable(model.make_cache):
+    if hasattr(model, "make_cache") and callable(model.make_cache):
         print("Creating KV cache...")
         cache = model.make_cache(batch_size=B)
     else:
@@ -230,7 +250,11 @@ def generate_step(
     repetition_context = [[] for _ in range(B)]  # List of lists for batch
     rep_context_size = -1
     if repetition_penalty is not None and repetition_penalty != 1.0:
-        rep_context_size = repetition_context_size if repetition_context_size is not None and repetition_context_size > 0 else S
+        rep_context_size = (
+            repetition_context_size
+            if repetition_context_size is not None and repetition_context_size > 0
+            else S
+        )
         for i in range(B):
             start_idx = max(0, S - rep_context_size)
             repetition_context[i] = list(prompts[i, start_idx:].tolist())
@@ -238,7 +262,9 @@ def generate_step(
     # Prefill forward pass
     print(f"Processing prefill (prompt shape: {y.shape})...")
     start_prefill = time.time()
-    prefill_mask = create_attention_mask(y, cache=None, return_array=True, dtype=y.dtype)
+    prefill_mask = create_attention_mask(
+        y, cache=None, return_array=True, dtype=y.dtype
+    )
     activation_store.register("generate.prefill.input_mask", prefill_mask)
     prefill_logits = model(y, cache=cache, mask=prefill_mask)
     mx.eval(prefill_logits)  # Sync after prefill
@@ -253,10 +279,16 @@ def generate_step(
     # Apply repetition penalty for first token
     penalized_prefill_logits = last_prefill_logits
     if repetition_penalty is not None and repetition_penalty != 1.0:
-        penalized_prefill_logits = apply_repetition_penalty(last_prefill_logits, repetition_context, repetition_penalty)
-        activation_store.register("generate.prefill.penalized_logits", penalized_prefill_logits)
+        penalized_prefill_logits = apply_repetition_penalty(
+            last_prefill_logits, repetition_context, repetition_penalty
+        )
+        activation_store.register(
+            "generate.prefill.penalized_logits", penalized_prefill_logits
+        )
     else:
-        activation_store.register("generate.prefill.penalized_logits", last_prefill_logits)
+        activation_store.register(
+            "generate.prefill.penalized_logits", last_prefill_logits
+        )
 
     # Sample first token
     y, p = sample(penalized_prefill_logits, "generate.prefill")
@@ -272,7 +304,12 @@ def generate_step(
     # Save prefill activations if requested
     if save_activations_dir:
         print("Saving prefill activations...")
-        save_activations(activation_store.get_captured_activations(), save_activations_dir, step="prefill", compress=save_compress)
+        save_activations(
+            activation_store.get_captured_activations(),
+            save_activations_dir,
+            step="prefill",
+            compress=save_compress,
+        )
 
     # Generation Loop
     step_count = 0
@@ -287,11 +324,11 @@ def generate_step(
         all_finished = True
         for i in range(B):
             if not finished[i]:
-                if y[i, 0].item() in eos_token_ids: 
+                if y[i, 0].item() in eos_token_ids:
                     finished[i] = True
-                else: 
+                else:
                     all_finished = False
-        if all_finished: 
+        if all_finished:
             print("\nAll sequences finished.")
             break
 
@@ -302,7 +339,12 @@ def generate_step(
         activation_store.register(f"{step_name}.input_token", step_input_token)
 
         # Forward pass for the single token
-        step_mask = create_attention_mask(step_input_token, cache=cache, return_array=True, dtype=step_input_token.dtype)
+        step_mask = create_attention_mask(
+            step_input_token,
+            cache=cache,
+            return_array=True,
+            dtype=step_input_token.dtype,
+        )
         activation_store.register(f"{step_name}.input_mask", step_mask)
         step_logits = model(step_input_token, cache=cache, mask=step_mask)
         last_token_logits = step_logits[:, -1, :]  # Shape [B, V]
@@ -311,10 +353,14 @@ def generate_step(
         # Apply repetition penalty
         penalized_logits = last_token_logits
         if repetition_penalty is not None and repetition_penalty != 1.0:
-            penalized_logits = apply_repetition_penalty(last_token_logits, repetition_context, repetition_penalty)
+            penalized_logits = apply_repetition_penalty(
+                last_token_logits, repetition_context, repetition_penalty
+            )
             activation_store.register(f"{step_name}.penalized_logits", penalized_logits)
         else:
-            activation_store.register(f"{step_name}.penalized_logits", last_token_logits)
+            activation_store.register(
+                f"{step_name}.penalized_logits", last_token_logits
+            )
 
         # Sample next token
         y, p = sample(penalized_logits, step_name)
@@ -325,12 +371,22 @@ def generate_step(
                 if not finished[i]:
                     token_item = y[i, 0].item()
                     repetition_context[i].append(token_item)
-                    if rep_context_size > 0 and len(repetition_context[i]) > rep_context_size:
-                        repetition_context[i] = repetition_context[i][-rep_context_size:]
+                    if (
+                        rep_context_size > 0
+                        and len(repetition_context[i]) > rep_context_size
+                    ):
+                        repetition_context[i] = repetition_context[i][
+                            -rep_context_size:
+                        ]
 
         # Save step activations if requested
         if save_activations_dir:
-            save_activations(activation_store.get_captured_activations(), save_activations_dir, step=step_count, compress=save_compress)
+            save_activations(
+                activation_store.get_captured_activations(),
+                save_activations_dir,
+                step=step_count,
+                compress=save_compress,
+            )
 
         step_count += 1
 
@@ -350,34 +406,34 @@ def batch_generate(
     verbose: bool = False,
 ) -> List[Dict[str, Union[str, List[int]]]]:
     """Generate text for multiple prompts with activation capture."""
-    
+
     # Tokenize prompts
     tokenized_prompts = []
     for prompt in prompts:
         tokens = tokenizer.encode(prompt, add_special_tokens=False)
         tokenized_prompts.append(tokens)
-    
+
     # Pad to same length
     max_len = max(len(tokens) for tokens in tokenized_prompts)
     padded_prompts = []
     for tokens in tokenized_prompts:
         if len(tokens) < max_len:
             # Pad with tokenizer pad token or 0
-            pad_token = getattr(tokenizer, 'pad_token_id', 0)
+            pad_token = getattr(tokenizer, "pad_token_id", 0)
             tokens = [pad_token] * (max_len - len(tokens)) + tokens
         padded_prompts.append(tokens)
-    
+
     prompt_tokens = mx.array(padded_prompts)
-    
+
     # Get EOS token IDs
     eos_token_ids = set()
-    if hasattr(tokenizer, 'eos_token_id') and tokenizer.eos_token_id is not None:
+    if hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None:
         eos_token_ids.add(tokenizer.eos_token_id)
-    
+
     # Generate
     results = []
     generated_tokens_list = [[] for _ in range(len(prompts))]
-    
+
     generator = generate_step(
         prompts=prompt_tokens,
         model=model,
@@ -390,32 +446,36 @@ def batch_generate(
         save_compress=save_compress,
         eos_token_ids=eos_token_ids,
     )
-    
+
     for step, (tokens, probs) in enumerate(generator):
         if step >= max_tokens:
             break
-            
+
         # Store generated tokens
         for i in range(len(prompts)):
             token = tokens[i, 0].item()
             generated_tokens_list[i].append(token)
-            
+
         if verbose:
             print(f"Step {step}: Generated tokens {tokens.tolist()}")
-    
+
     # Decode results
     for i, (prompt, generated_tokens) in enumerate(zip(prompts, generated_tokens_list)):
         try:
-            generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            generated_text = tokenizer.decode(
+                generated_tokens, skip_special_tokens=True
+            )
         except Exception as e:
             print(f"Warning: Failed to decode tokens for prompt {i}: {e}")
             generated_text = f"<decoding_error: {generated_tokens}>"
-        
-        results.append({
-            "prompt": prompt,
-            "generated_text": generated_text,
-            "generated_tokens": generated_tokens,
-            "num_tokens": len(generated_tokens)
-        })
-    
+
+        results.append(
+            {
+                "prompt": prompt,
+                "generated_text": generated_text,
+                "generated_tokens": generated_tokens,
+                "num_tokens": len(generated_tokens),
+            }
+        )
+
     return results

@@ -81,6 +81,10 @@ tmp/
 temp/
 *.tmp
 *.bak
+test_*.py
+check_*.py
+diagnose_*.py
+fix_*.py
 
 # claude
 .claude/

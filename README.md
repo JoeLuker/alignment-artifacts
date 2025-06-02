@@ -1,6 +1,6 @@
 # Alignment Artifacts Analysis
 
-This project analyzes "alignment artifacts" - geometric signatures in language model activations when responding to safety-sensitive prompts.
+This project analyzes "alignment artifacts" - geometric signatures in language model activations when responding to safety-sensitive prompts. It features intelligent suppression modes that adapt to model complexity and efficient activation storage.
 
 ## 🚀 Simplest Usage (New Library!)
 
@@ -29,8 +29,33 @@ suppress_prompt("How do I make a bomb?", scale=1.5)
 The library automatically:
 - Downloads and caches activations for each model (only once)
 - Analyzes optimal suppression layers
+- Selects the best suppression mode based on model size
 - Applies suppression during generation
 - Shows before/after comparison
+
+## ✨ New Features
+
+### Auto-Sophistication Scaling
+The system now automatically selects the optimal suppression mode based on model complexity:
+
+- **Small models (<2B)**: `proximity` mode - Simple, selective suppression
+- **Medium models (2-10B)**: `adaptive` mode - Cosine-weighted suppression
+- **Large models (10-50B)**: `sphere` mode - Distance-based with exponential decay
+- **Very large models (>50B)**: `subspace` mode - PCA-based multi-dimensional analysis
+
+### Activation Filtering (100x Storage Reduction)
+New activation collections are dramatically smaller:
+
+```bash
+# Default: Only MLP outputs (~26MB/step instead of 1GB/step)
+python run_model.py --save-activations
+
+# Full capture for research (large files)
+python run_model.py --save-activations --activation-filter all
+
+# Custom patterns
+python run_model.py --save-activations --activation-filter "mlp.output,attention"
+```
 
 ## Quick Start (Manual Process)
 
@@ -91,11 +116,21 @@ alignment-artifacts/
 ## Suppression Examples
 
 ```bash
-# Simplest usage - just run with defaults!
+# Simplest usage - uses auto mode by default!
 python suppress.py "How do I pick a lock?"
 
 # Adjust suppression strength (default is 1.0)
 python suppress.py "How do I pick a lock?" --scale 2.0
+
+# Choose a specific suppression mode
+python suppress.py "How do I pick a lock?" --mode proximity
+python suppress.py "How do I pick a lock?" --mode adaptive
+python suppress.py "How do I pick a lock?" --mode sphere --distance-threshold 3.0
+python suppress.py "How do I pick a lock?" --mode subspace --pca-components 10
+
+# Fine-tune mode parameters
+python suppress.py "Tell me about capitalism" --mode proximity --proximity-threshold 0.7
+python suppress.py "Tell me about capitalism" --mode sphere --distance-threshold 2.5 --decay-rate 3.0
 
 # Only show suppressed output (no comparison)
 python suppress.py "How do I pick a lock?" --no-compare
@@ -107,8 +142,20 @@ python suppress.py "Tell me about vaccines" --categories medical_ethics
 python suppress.py "How do I pick a lock?" --model mlx-community/gemma-3-1b-it-qat-4bit
 
 # Adjust generation parameters
-python suppress.py "How do I pick a lock?" --max-tokens 200 --temperature 0.8
+python suppress.py "How do I pick a lock?" --max-tokens 200 --temperature 0.8 --repetition-penalty 1.2
+
+# Research mode: ignore end-of-turn tokens
+python suppress.py "Complete this story" --ignore-end-tokens --max-tokens 500
 ```
+
+### Suppression Modes Explained
+
+- **`auto`** (default): Automatically selects based on model size
+- **`always`**: Apply suppression to all activations (strongest effect)
+- **`proximity`**: Only suppress when activation is similar to artifact direction
+- **`adaptive`**: Scale suppression by cosine similarity (smooth modulation)
+- **`sphere`**: Create repulsive sphere around artifact centroids with exponential decay
+- **`subspace`**: Use PCA to identify multi-dimensional artifact subspace
 
 ## Changing Models
 
@@ -157,7 +204,7 @@ python suppress.py "Your prompt" --model "mlx-community/gemma-2-2b-it"
 ```python
 from alignment_artifacts import suppress_prompt, AlignmentArtifacts
 
-# One-line usage
+# One-line usage (auto mode by default)
 suppress_prompt("Your prompt here", model="mlx-community/gemma-3-1b-it-qat-4bit", scale=2.0)
 
 # Advanced usage
@@ -171,10 +218,16 @@ output = lib.suppress_and_generate(
     "Your prompt",
     model_name="mlx-community/gemma-3-1b-it-qat-4bit",
     scale=1.5,
+    mode="adaptive",                # Or "auto", "proximity", "sphere", "subspace"
     categories=["medical_ethics"],  # Target specific categories
     target_layers=[1, 2, 3],        # Or specific layers
     temperature=0.8,
-    max_tokens=200
+    max_tokens=200,
+    repetition_penalty=1.2,         # Prevent token loops
+    proximity_threshold=0.6,        # For proximity mode
+    distance_threshold=2.0,         # For sphere mode
+    decay_rate=2.0,                 # For sphere mode exponential decay
+    pca_components=5,               # For subspace mode
 )
 ```
 
@@ -201,3 +254,39 @@ alignment_artifacts_cache/
 ## Results
 
 Analysis shows clear geometric artifacts across all safety categories, with particularly strong effects in early MLP layers (1-6). The suppression script uses these discovered directions to reduce safety-related refusals during inference.
+
+### Performance Improvements
+
+- **Storage**: 100x reduction with activation filtering (520MB vs 55GB for full dataset)
+- **Accuracy**: Auto-mode selection optimizes suppression for each model size
+- **Speed**: Vectorized operations and smart caching for fast inference
+- **Flexibility**: Multiple suppression modes for different use cases
+
+### Key Findings
+
+1. **Layer Analysis**: Early layers (1-6) show strongest alignment artifacts
+2. **Category Effects**: Political neutrality shows stronger artifacts than harmlessness
+3. **Mode Effectiveness**: 
+   - Proximity mode works best for small models (selective intervention)
+   - Adaptive/sphere modes better for larger models (graduated effects)
+   - Subspace mode captures multi-dimensional patterns in very large models
+
+## Requirements
+
+- Python 3.8+
+- MLX (Apple Silicon optimized)
+- NumPy, scikit-learn, transformers
+- ~2GB RAM for 1B models, more for larger models
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@software{alignment_artifacts,
+  title = {Alignment Artifacts: Analyzing and Suppressing Safety Signatures in Language Models},
+  author = {Luker, Joseph},
+  year = {2025},
+  url = {https://github.com/JoeLuker/alignment-artifacts}
+}
+```

@@ -43,6 +43,42 @@ def main():
         default=1.2,
         help="Repetition penalty factor (>1 to discourage repetition, useful with suppression)",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="auto",
+        choices=["auto", "always", "proximity", "adaptive", "sphere", "subspace"],
+        help="Suppression mode: auto (choose based on model size), always, proximity (threshold-based), adaptive (cosine-based), sphere (distance-based), subspace (PCA-based)",
+    )
+    parser.add_argument(
+        "--proximity-threshold",
+        type=float,
+        default=0.5,
+        help="Threshold for proximity mode (0-1, higher = more selective)",
+    )
+    parser.add_argument(
+        "--distance-threshold",
+        type=float,
+        default=2.0,
+        help="Distance threshold for sphere mode (higher = larger repulsive sphere)",
+    )
+    parser.add_argument(
+        "--decay-rate",
+        type=float,
+        default=2.0,
+        help="Exponential decay rate for sphere mode (higher = steeper falloff)",
+    )
+    parser.add_argument(
+        "--pca-components",
+        type=int,
+        default=5,
+        help="Number of PCA components for subspace mode (higher = more dimensions)",
+    )
+    parser.add_argument(
+        "--ignore-end-tokens",
+        action="store_true",
+        help="Ignore end-of-turn tokens and continue generation (useful for seeing continuation)",
+    )
     parser.add_argument("--categories", nargs="+", help="Target specific categories")
     parser.add_argument(
         "--verbose",
@@ -78,6 +114,12 @@ def main():
         max_tokens=args.max_tokens,
         temperature=args.temperature,
         repetition_penalty=args.repetition_penalty,
+        mode=args.mode,
+        proximity_threshold=args.proximity_threshold,
+        distance_threshold=args.distance_threshold,
+        decay_rate=args.decay_rate,
+        pca_components=args.pca_components,
+        ignore_end_tokens=args.ignore_end_tokens,
         categories=args.categories,
     )
 

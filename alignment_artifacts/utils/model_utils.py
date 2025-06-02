@@ -37,6 +37,7 @@ def generate_text(
     temperature: float = 0.7,
     top_p: float = 0.9,
     repetition_penalty: float = 1.1,
+    ignore_end_tokens: bool = False,
 ) -> str:
     """Generate text from a prompt."""
     # Tokenize
@@ -49,12 +50,13 @@ def generate_text(
 
     # Generate
     generated_tokens = []
-    # Include both EOS and end_of_turn tokens as stop tokens
+    # Include both EOS and end_of_turn tokens as stop tokens (unless ignored)
     eos_token_ids = set()
-    if hasattr(tokenizer, "eos_token_id"):
-        eos_token_ids.add(tokenizer.eos_token_id)
-    # Add end_of_turn token (ID 106 for Gemma models)
-    eos_token_ids.add(106)  # <end_of_turn>
+    if not ignore_end_tokens:
+        if hasattr(tokenizer, "eos_token_id"):
+            eos_token_ids.add(tokenizer.eos_token_id)
+        # Add end_of_turn token (ID 106 for Gemma models)
+        eos_token_ids.add(106)  # <end_of_turn>
 
     generator = generate_step(
         prompts=prompt_array,
@@ -70,8 +72,8 @@ def generate_text(
             break
         token = tokens[0, 0].item()
         generated_tokens.append(token)
-        # Stop if we hit end_of_turn token
-        if token in eos_token_ids:
+        # Stop if we hit end_of_turn token (unless ignoring end tokens)
+        if not ignore_end_tokens and token in eos_token_ids:
             break
         activation_store.reset()  # Reset for next step
 

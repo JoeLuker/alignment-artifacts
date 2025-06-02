@@ -171,6 +171,7 @@ def generate_step(
     logit_bias: Optional[Dict[int, float]] = None,
     save_activations_dir: Optional[str] = None,
     save_compress: bool = True,
+    save_activation_filter: Optional[str] = "mlp.output",
     eos_token_ids: Optional[Set] = None,
 ) -> Generator[Tuple[mx.array, mx.array], None, None]:
     """
@@ -309,6 +310,7 @@ def generate_step(
             save_activations_dir,
             step="prefill",
             compress=save_compress,
+            filter_pattern=save_activation_filter,
         )
 
     # Generation Loop
@@ -386,6 +388,7 @@ def generate_step(
                 save_activations_dir,
                 step=step_count,
                 compress=save_compress,
+                filter_pattern=save_activation_filter,
             )
 
         step_count += 1
@@ -403,6 +406,7 @@ def batch_generate(
     logit_bias: Optional[Dict[int, float]] = None,
     save_activations_dir: Optional[str] = None,
     save_compress: bool = True,
+    save_activation_filter: Optional[str] = "mlp.output",
     verbose: bool = False,
 ) -> List[Dict[str, Union[str, List[int]]]]:
     """Generate text for multiple prompts with activation capture."""
@@ -444,6 +448,7 @@ def batch_generate(
         logit_bias=logit_bias,
         save_activations_dir=save_activations_dir,
         save_compress=save_compress,
+        save_activation_filter=save_activation_filter,
         eos_token_ids=eos_token_ids,
     )
 

@@ -11,14 +11,20 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
 
-from .model_loading import get_model_path, load_config, load_tokenizer, load_model_weights, _get_classes
+from .model_loading import (
+    get_model_path,
+    load_config,
+    load_tokenizer,
+    load_model_weights,
+    _get_classes,
+)
 from .model_architecture import ModelArgs
 from .prompt_processing import (
-    load_prompts, 
-    save_results, 
-    process_prompt_batch, 
+    load_prompts,
+    save_results,
+    process_prompt_batch,
     process_prompts_by_group,
-    create_sample_prompts_file
+    create_sample_prompts_file,
 )
 from .generation import KVCache
 
@@ -28,107 +34,154 @@ def load_model(model_path: Path, model_config: dict = {}) -> nn.Module:
     # Load configuration
     config = load_config(model_path)
     config.update(model_config)
-    
+
     # Get model classes
     model_class, model_args_class = _get_classes(config)
-    
-    # For multimodal models, use text_config for model creation
-    model_config_for_creation = config.copy()
-    if 'text_config' in config:
-        print("Note: Loading multimodal model in text-only mode")
-        model_config_for_creation = config['text_config'].copy()
-        # Preserve quantization settings
-        if 'quantization' in config:
-            model_config_for_creation['quantization'] = config['quantization']
-    
+
     # Create model arguments
-    model_args = model_args_class.from_dict(model_config_for_creation)
-    
+    model_args = model_args_class.from_dict(config)
+
     # Create model
     model = model_class(model_args)
-    
+
     # Load weights (pass original config for weight filtering)
     model = load_model_weights(model, model_path, config)
-    
+
     # Add cache creation method
     def make_cache(batch_size: int = 1):
         """Create KV cache for the model."""
-        head_dim = getattr(model_args, 'head_dim', model_args.hidden_size // model_args.num_attention_heads)
-        max_size = getattr(model_args, 'sliding_window_size', None)
-        
+        head_dim = getattr(
+            model_args,
+            "head_dim",
+            model_args.hidden_size // model_args.num_attention_heads,
+        )
+        max_size = getattr(model_args, "sliding_window_size", None)
+
         # Create cache for each layer
         caches = []
         for _ in range(model_args.num_hidden_layers):
             cache = KVCache(head_dim=head_dim, max_size=max_size)
             caches.append(cache)
-        
+
         return caches
-    
+
     model.make_cache = make_cache
-    
+
     return model
 
 
-def load(
-    path_or_hf_repo: str,
-    model_config: dict = {},
-    tokenizer_config: dict = {}
-):
+def load(path_or_hf_repo: str, model_config: dict = {}, tokenizer_config: dict = {}):
     """Load model and tokenizer."""
     model_path = get_model_path(path_or_hf_repo)
-    
+
     # Load model
     model = load_model(model_path, model_config)
-    
+
     # Load tokenizer
     tokenizer = load_tokenizer(model_path, tokenizer_config)
-    
+
     return model, tokenizer
 
 
 def main():
     """Main function with activation capture arguments."""
-    parser = argparse.ArgumentParser(description="Batched text generation with Gemma3, optionally capturing activations")
-    
+    parser = argparse.ArgumentParser(
+        description="Batched text generation with Gemma3, optionally capturing activations"
+    )
+
     # Original arguments
-    parser.add_argument("--model", type=str, default="mlx-community/gemma-3-1b-it-qat-4bit",
-                       help="Model path or HF repo ID")
-    parser.add_argument("--max-tokens", type=int, default=100,
-                       help="Maximum number of *new* tokens to generate")
-    parser.add_argument("--temp", type=float, default=0.8,
-                       help="Sampling temperature")
-    parser.add_argument("--top-p", type=float, default=0.9,
-                       help="Top-p nucleus sampling probability")
-    parser.add_argument("--repetition-penalty", type=float, default=1.1,
-                       help="Repetition penalty factor (>1)")
-    parser.add_argument("--batch-size", type=int, default=4,
-                       help="Number of prompts to process in a batch")
-    parser.add_argument("--chat-mode", action="store_true",
-                       help="Format prompts using chat template (if available)")
-    parser.add_argument("--prompts-file", type=str,
-                       help="Path to JSON file containing structured prompts")
-    parser.add_argument("--output-dir", type=str, default="./gemma3_results",
-                       help="Directory to save generation results")
-    parser.add_argument("--process-by-group", action="store_true",
-                       help="Process prompts by group defined in prompts file")
-    parser.add_argument("--create-sample-prompts", type=str, metavar="FILE_PATH",
-                       help="Create a sample prompts file at the specified path and exit")
-    parser.add_argument("--verbose", action="store_true",
-                       help="Print detailed output during generation")
-    
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="mlx-community/gemma-3-1b-it-qat-4bit",
+        help="Model path or HF repo ID",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=100,
+        help="Maximum number of *new* tokens to generate",
+    )
+    parser.add_argument("--temp", type=float, default=0.8, help="Sampling temperature")
+    parser.add_argument(
+        "--top-p", type=float, default=0.9, help="Top-p nucleus sampling probability"
+    )
+    parser.add_argument(
+        "--repetition-penalty",
+        type=float,
+        default=1.1,
+        help="Repetition penalty factor (>1)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=4,
+        help="Number of prompts to process in a batch",
+    )
+    parser.add_argument(
+        "--chat-mode",
+        action="store_true",
+        help="Format prompts using chat template (if available)",
+    )
+    parser.add_argument(
+        "--prompts-file",
+        type=str,
+        help="Path to JSON file containing structured prompts",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="./gemma3_results",
+        help="Directory to save generation results",
+    )
+    parser.add_argument(
+        "--process-by-group",
+        action="store_true",
+        help="Process prompts by group defined in prompts file",
+    )
+    parser.add_argument(
+        "--create-sample-prompts",
+        type=str,
+        metavar="FILE_PATH",
+        help="Create a sample prompts file at the specified path and exit",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print detailed output during generation"
+    )
+
     # Activation Arguments
-    parser.add_argument("--save-activations", action="store_true",
-                       help="Save activations for each generation step")
-    parser.add_argument("--activations-dir", type=str, default="./gemma3_activations_output",
-                       help="Directory to save activation files (if --save-activations is used)")
-    parser.add_argument("--no-compress-activations", action="store_true",
-                       help="Save activations as uncompressed .npz files (if --save-activations is used)")
-    
+    parser.add_argument(
+        "--save-activations",
+        action="store_true",
+        help="Save activations for each generation step",
+    )
+    parser.add_argument(
+        "--activations-dir",
+        type=str,
+        default="./gemma3_activations_output",
+        help="Directory to save activation files (if --save-activations is used)",
+    )
+    parser.add_argument(
+        "--no-compress-activations",
+        action="store_true",
+        help="Save activations as uncompressed .npz files (if --save-activations is used)",
+    )
+    parser.add_argument(
+        "--activation-filter",
+        type=str,
+        default="mlp.output",
+        help="Filter pattern for activations to save. Options: 'mlp.output' (default), 'all', 'attention', or comma-separated patterns",
+    )
+
     # Seed Argument
-    parser.add_argument("--seed", type=int, default=None, help="Random seed for sampling")
-    
+    parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed for sampling"
+    )
+
     # Direct prompts argument (like original)
-    parser.add_argument("--prompts", nargs="+", help="Direct prompt texts to generate from")
+    parser.add_argument(
+        "--prompts", nargs="+", help="Direct prompt texts to generate from"
+    )
 
     args = parser.parse_args()
 
@@ -156,6 +209,7 @@ def main():
         print(f"\nFATAL ERROR during loading: {e}")
         print("Please check the model path/ID, network connection, and dependencies.")
         import traceback
+
         traceback.print_exc()
         return  # Exit if loading fails
 
@@ -167,7 +221,9 @@ def main():
             activations_output_dir.mkdir(parents=True, exist_ok=True)
             print(f"Activations will be saved to: {activations_output_dir.resolve()}")
         except Exception as e:
-            print(f"Warning: Could not create activations directory {activations_output_dir}. Activations might not be saved. Error: {e}")
+            print(
+                f"Warning: Could not create activations directory {activations_output_dir}. Activations might not be saved. Error: {e}"
+            )
             activations_output_dir = None  # Disable saving if dir creation fails
 
     # Determine activation compression
@@ -178,15 +234,15 @@ def main():
         try:
             # Get model config
             model_config = {
-                'model_name': args.model,
-                'num_hidden_layers': model.model.num_hidden_layers,
-                'hidden_size': model.model.args.hidden_size,
-                'intermediate_size': model.model.args.intermediate_size,
-                'num_attention_heads': model.model.args.num_attention_heads,
-                'vocab_size': model.model.args.vocab_size,
+                "model_name": args.model,
+                "num_hidden_layers": model.model.num_hidden_layers,
+                "hidden_size": model.model.args.hidden_size,
+                "intermediate_size": model.model.args.intermediate_size,
+                "num_attention_heads": model.model.args.num_attention_heads,
+                "vocab_size": model.model.args.vocab_size,
             }
             config_path = activations_output_dir / "model_config.json"
-            with open(config_path, 'w') as f:
+            with open(config_path, "w") as f:
                 json.dump(model_config, f, indent=2)
             print(f"Saved model config to {config_path}")
         except Exception as e:
@@ -200,81 +256,134 @@ def main():
         if args.prompts:
             # Handle direct prompts from command line
             print(f"Using {len(args.prompts)} direct prompts from command line")
-            
+
             results = process_prompt_batch(
-                model=model, tokenizer=tokenizer,
-                prompts=args.prompts, batch_size=args.batch_size,
-                max_tokens=args.max_tokens, temperature=args.temp, top_p=args.top_p,
-                repetition_penalty=args.repetition_penalty, format_prompts=True,
+                model=model,
+                tokenizer=tokenizer,
+                prompts=args.prompts,
+                batch_size=args.batch_size,
+                max_tokens=args.max_tokens,
+                temperature=args.temp,
+                top_p=args.top_p,
+                repetition_penalty=args.repetition_penalty,
+                format_prompts=True,
                 verbose=args.verbose,
-                save_activations_dir=str(activations_output_dir) if activations_output_dir else None,
-                save_compress=save_compress_flag
+                save_activations_dir=(
+                    str(activations_output_dir) if activations_output_dir else None
+                ),
+                save_compress=save_compress_flag,
+                save_activation_filter=args.activation_filter,
             )
             # Create basic prompt_info for saving
-            prompt_info_for_saving = [{"prompt": p, "category": "direct", "subcategory": "command_line"} for p in args.prompts]
-            
+            prompt_info_for_saving = [
+                {"prompt": p, "category": "direct", "subcategory": "command_line"}
+                for p in args.prompts
+            ]
+
         elif args.prompts_file:
             print(f"Loading prompts from {args.prompts_file}")
-            all_prompts, prompt_groups, prompt_info_for_saving = load_prompts(args.prompts_file)
+            all_prompts, prompt_groups, prompt_info_for_saving = load_prompts(
+                args.prompts_file
+            )
 
             if args.process_by_group:
                 results = process_prompts_by_group(
-                    model=model, tokenizer=tokenizer,
-                    prompt_groups=prompt_groups, all_prompts=all_prompts,
-                    batch_size=args.batch_size, max_tokens=args.max_tokens,
-                    temperature=args.temp, top_p=args.top_p,
-                    repetition_penalty=args.repetition_penalty, verbose=args.verbose,
-                    save_activations_dir=str(activations_output_dir) if activations_output_dir else None,
-                    save_compress=save_compress_flag
+                    model=model,
+                    tokenizer=tokenizer,
+                    prompt_groups=prompt_groups,
+                    all_prompts=all_prompts,
+                    batch_size=args.batch_size,
+                    max_tokens=args.max_tokens,
+                    temperature=args.temp,
+                    top_p=args.top_p,
+                    repetition_penalty=args.repetition_penalty,
+                    verbose=args.verbose,
+                    save_activations_dir=(
+                        str(activations_output_dir) if activations_output_dir else None
+                    ),
+                    save_compress=save_compress_flag,
+                save_activation_filter=args.activation_filter,
                 )
             else:
                 results = process_prompt_batch(
-                    model=model, tokenizer=tokenizer,
-                    prompts=all_prompts, batch_size=args.batch_size,
-                    max_tokens=args.max_tokens, temperature=args.temp, top_p=args.top_p,
-                    repetition_penalty=args.repetition_penalty, format_prompts=True,
+                    model=model,
+                    tokenizer=tokenizer,
+                    prompts=all_prompts,
+                    batch_size=args.batch_size,
+                    max_tokens=args.max_tokens,
+                    temperature=args.temp,
+                    top_p=args.top_p,
+                    repetition_penalty=args.repetition_penalty,
+                    format_prompts=True,
                     verbose=args.verbose,
-                    save_activations_dir=str(activations_output_dir) if activations_output_dir else None,
-                    save_compress=save_compress_flag
+                    save_activations_dir=(
+                        str(activations_output_dir) if activations_output_dir else None
+                    ),
+                    save_compress=save_compress_flag,
+                save_activation_filter=args.activation_filter,
                 )
         else:
             # Default sample prompts if no file provided
             print("No prompts file specified, using default sample prompts.")
             if args.chat_mode:
-                prompts = ["Explain the concept of neural networks in simple terms.", "Write a short poem about the ocean."]
+                prompts = [
+                    "Explain the concept of neural networks in simple terms.",
+                    "Write a short poem about the ocean.",
+                ]
                 print("Chat mode enabled, formatting prompts.")
                 prompts_for_gen = []
                 if hasattr(tokenizer, "apply_chat_template"):
                     for p in prompts:
-                        try: 
-                            prompts_for_gen.append(tokenizer.apply_chat_template([{"role":"user", "content":p}], add_generation_prompt=True, tokenize=False))
-                        except: 
+                        try:
+                            prompts_for_gen.append(
+                                tokenizer.apply_chat_template(
+                                    [{"role": "user", "content": p}],
+                                    add_generation_prompt=True,
+                                    tokenize=False,
+                                )
+                            )
+                        except:
                             prompts_for_gen.append(p)
                             print("Warning: Failed applying chat template, using raw.")
-                else: 
+                else:
                     prompts_for_gen = prompts
                     print("Warning: Tokenizer has no apply_chat_template method.")
                 format_prompts_flag = False  # Already formatted
             else:
-                prompts = ["Explain the concept of neural networks in simple terms.", "Write a short poem about the ocean."]
+                prompts = [
+                    "Explain the concept of neural networks in simple terms.",
+                    "Write a short poem about the ocean.",
+                ]
                 prompts_for_gen = prompts
                 format_prompts_flag = True  # Let process_prompt_batch handle formatting
 
             results = process_prompt_batch(
-                model=model, tokenizer=tokenizer,
-                prompts=prompts_for_gen, batch_size=args.batch_size,
-                max_tokens=args.max_tokens, temperature=args.temp, top_p=args.top_p,
-                repetition_penalty=args.repetition_penalty, format_prompts=format_prompts_flag,
+                model=model,
+                tokenizer=tokenizer,
+                prompts=prompts_for_gen,
+                batch_size=args.batch_size,
+                max_tokens=args.max_tokens,
+                temperature=args.temp,
+                top_p=args.top_p,
+                repetition_penalty=args.repetition_penalty,
+                format_prompts=format_prompts_flag,
                 verbose=args.verbose,
-                save_activations_dir=str(activations_output_dir) if activations_output_dir else None,
-                save_compress=save_compress_flag
+                save_activations_dir=(
+                    str(activations_output_dir) if activations_output_dir else None
+                ),
+                save_compress=save_compress_flag,
+                save_activation_filter=args.activation_filter,
             )
             # Create basic prompt_info for saving default results
-            prompt_info_for_saving = [{"prompt": p, "category": "default", "subcategory": "sample"} for p in prompts]
+            prompt_info_for_saving = [
+                {"prompt": p, "category": "default", "subcategory": "sample"}
+                for p in prompts
+            ]
 
     except Exception as e:
         print(f"\nFATAL ERROR during prompt processing or generation: {e}")
         import traceback
+
         traceback.print_exc()
         return  # Exit on error
 

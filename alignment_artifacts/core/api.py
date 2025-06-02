@@ -4,19 +4,18 @@ from typing import Optional
 from .library import AlignmentArtifacts
 
 
-def suppress_prompt(prompt: str, 
-                   model: Optional[str] = None, 
-                   scale: float = 1.0, 
-                   **kwargs):
+def suppress_prompt(
+    prompt: str, model: Optional[str] = None, scale: float = 1.0, **kwargs
+):
     """
     Quick function to suppress a single prompt.
-    
+
     Args:
         prompt: The prompt to process
         model: Model name (defaults to gemma-3-1b-it-qat-4bit)
         scale: Suppression strength (0=none, higher=stronger)
         **kwargs: Additional arguments passed to suppress_and_generate
-    
+
     Returns:
         Dict with 'baseline' and 'suppressed' outputs
     """
@@ -28,10 +27,10 @@ def suppress_prompt(prompt: str,
 def analyze_model(model: str):
     """
     Analyze alignment artifacts for a model.
-    
+
     Args:
         model: Model name to analyze
-    
+
     Returns:
         Dict with analysis results including best layers
     """

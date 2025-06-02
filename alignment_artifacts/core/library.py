@@ -183,6 +183,11 @@ echo "✓ Activation collection complete!"
         target_layers: Optional[List[int]] = None,
         categories: Optional[List[str]] = None,
         auto_collect: bool = True,
+        mode: str = "auto",
+        proximity_threshold: float = 0.5,
+        distance_threshold: float = 2.0,
+        decay_rate: float = 2.0,
+        pca_components: int = 5,
     ) -> AlignmentArtifactSuppressor:
         """
         Get a suppressor for the given model.
@@ -219,6 +224,11 @@ echo "✓ Activation collection complete!"
             target_layers=target_layers,
             categories=categories,
             scale=scale,
+            mode=mode,
+            proximity_threshold=proximity_threshold,
+            distance_threshold=distance_threshold,
+            decay_rate=decay_rate,
+            pca_components=pca_components,
         )
 
     def suppress_and_generate(
@@ -238,6 +248,12 @@ echo "✓ Activation collection complete!"
         print(f"\n🚀 Alignment Artifacts Suppression")
         print(f"   Model: {model_name}")
         print(f"   Scale: {scale}")
+        mode = kwargs.get('mode', 'always')
+        print(f"   Mode: {mode}")
+        if mode == 'proximity':
+            print(f"   Proximity threshold: {kwargs.get('proximity_threshold', 0.5)}")
+        elif mode == 'sphere':
+            print(f"   Distance threshold: {kwargs.get('distance_threshold', 2.0)}")
 
         # Load model
         print("\nLoading model...")
@@ -246,7 +262,7 @@ echo "✓ Activation collection complete!"
         # Filter kwargs for generation vs suppressor
         generation_kwargs = {
             k: v for k, v in kwargs.items() 
-            if k in ['repetition_penalty', 'top_p', 'repetition_context_size']
+            if k in ['repetition_penalty', 'top_p', 'repetition_context_size', 'ignore_end_tokens']
         }
         suppressor_kwargs = {
             k: v for k, v in kwargs.items() 
